@@ -1,0 +1,67 @@
+:root{color-scheme:dark;--ink:#f3eee4;--muted:#b5b4b1;--gold:#e5bc7c;--edge:#a38f6b6e;--panel:#141b23;--dark:#0b1016;font-family:system-ui,sans-serif;font-size:16px}
+*{box-sizing:border-box}
+body{margin:0;background:var(--dark);color:var(--ink)}
+button,a,select{font:inherit}
+button,a{touch-action:manipulation}
+button{cursor:pointer}
+button:disabled{cursor:default;opacity:.54}
+:focus-visible{outline:2px solid #fff3cd;outline-offset:3px}
+a{color:var(--gold)}
+h1,h2,h3,p{margin:0}
+h1,h2{font-family:Georgia,serif;font-weight:500}
+h1{font-size:clamp(1.45rem,4vw,3.1rem);line-height:1.05}
+h2{font-size:clamp(1.35rem,3vw,2rem)}
+p{line-height:1.5;overflow-wrap:anywhere}
+small,.muted{color:var(--muted)}
+#app{height:100dvh;min-height:0}
+.game{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr) auto;max-width:1800px;margin:auto;overflow:hidden}
+.top,.hud{display:flex;align-items:center;justify-content:space-between;gap:.4rem;padding:.42rem clamp(.5rem,2vw,1.6rem);background:#111821;border-block:1px solid #9f876a42}
+.hud{justify-content:center;flex-wrap:wrap}
+.brand,.kicker{letter-spacing:.16em;text-transform:uppercase;font-size:.68rem;font-weight:750;color:var(--gold)}
+.top-title{font-size:.85rem;color:var(--muted)}
+.scene{position:relative;isolation:isolate;min-height:0;overflow:hidden;background:#202831 var(--art) center 54%/cover no-repeat}
+.scene::before{position:absolute;inset:0;z-index:-1;content:'';background:linear-gradient(0deg,#0a1119c9,transparent 42%,#080f1990)}
+.scene header{position:absolute;inset:.65rem .85rem auto;pointer-events:none;text-shadow:0 2px 8px #000}
+.scene header h1{margin-top:.2rem}
+.scene.intro::before{background:linear-gradient(90deg,#091018ec,#0910189c 39%,transparent 75%),linear-gradient(0deg,#091018,transparent 46%)}
+.intro-copy{position:absolute;inset:auto auto clamp(1rem,7vh,4rem) clamp(1rem,7vw,6rem);width:min(37rem,88%);display:grid;gap:.65rem}
+.intro-copy p{max-width:52ch}
+.actions,.exits{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center}
+.btn,.btn-link,select{min-height:44px;padding:.45rem .72rem;border:1px solid var(--edge);border-radius:.42rem;background:#202a34;color:var(--ink);font-size:.85rem;text-decoration:none}
+.btn.primary{background:var(--gold);color:#1b1511;border-color:var(--gold);font-weight:750}
+.btn:hover:not(:disabled),.btn-link:hover{border-color:var(--gold);filter:brightness(1.12)}
+.exits{position:absolute;bottom:.65rem;left:.85rem;right:.85rem;z-index:1}
+.hotspot{position:absolute;left:var(--x);top:var(--y);transform:translate(-50%,-50%);display:grid;justify-items:center;gap:.15rem;z-index:1;min-width:44px;min-height:44px;border:0;background:none;color:var(--ink);padding:0;text-shadow:0 2px 3px #000}
+.hotspot b{display:grid;place-items:center;width:2.3rem;height:2.3rem;border-radius:50%;border:1px solid var(--gold);background:#172029dc;color:var(--gold);box-shadow:0 0 0 .22rem #d7ac6942}
+.hotspot span,.actor span{font-size:.73rem;background:#0a111ae7;border:1px solid var(--edge);border-radius:.3rem;padding:.15rem .32rem;text-align:center;line-height:1.25}
+.actor{position:absolute;left:var(--actor-x,68%);bottom:11%;transform:translateX(-50%);height:68%;width:clamp(5rem,17vw,13rem);border:0;background:none;color:var(--ink);padding:0;display:grid;justify-items:center;align-items:end;z-index:1}
+.actor img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;object-position:bottom;filter:drop-shadow(0 .4rem .3rem #0009);transition:transform .2s}
+.actor:hover img,.actor:focus-visible img{filter:drop-shadow(0 0 .75rem #eccb83);transform:scale(1.03)}
+.actor span{position:relative;z-index:1}
+.actor.focus img{transform:translateX(-.3rem) scale(1.08)}
+.actor.guarded img{transform:translateX(.4rem) scale(.97)}
+.actor.speaking{bottom:23%;left:21%;height:65%;pointer-events:none}
+.thought,.conversation{position:absolute;bottom:3.7rem;left:.85rem;right:.85rem;padding:.55rem .72rem;background:#111821ed;border:1px solid var(--edge);border-radius:.46rem;z-index:2}
+.thought{max-width:42rem}
+.conversation{left:32%;bottom:.55rem;display:grid;gap:.35rem;max-height:72%;overflow:auto}
+.conversation .actions .btn{flex:1 1 9rem}
+.conversation p{font-size:.9rem}
+#panel{width:min(47rem,calc(100% - 1rem));max-height:calc(100dvh - 1rem);color:var(--ink);background:#141c25;border:1px solid #baa579;border-radius:.7rem;padding:.85rem;box-shadow:0 1.3rem 4rem #000a}
+#panel::backdrop{background:#06090ce0}
+.panel-head{position:sticky;top:-.85rem;z-index:1;background:#141c25;display:flex;justify-content:space-between;gap:.5rem;padding:.2rem 0 .55rem;border-bottom:1px solid var(--edge)}
+.panel-body,.stack{display:grid;gap:.6rem;margin-top:.55rem}
+.card{padding:.65rem;border:1px solid var(--edge);background:#1b252f;border-radius:.42rem}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem}
+.prop{width:100%;max-height:11rem;object-fit:cover;border-radius:.4rem}
+.sheet{white-space:pre-line}
+#status{position:fixed;bottom:3.6rem;right:.65rem;max-width:min(85%,34rem);z-index:5;padding:.42rem .7rem;border-radius:.35rem;background:#1b2a34;border:1px solid var(--edge)}
+#status:empty{display:none}
+@media(max-height:650px){.intro-copy{bottom:1.15rem}.actor.speaking{bottom:20%}.hotspot b{width:1.9rem;height:1.9rem}.top-title{display:none}}
+@media(max-width:590px){.top,.hud{padding:.25rem}.hud .btn{padding:.32rem .4rem;font-size:.72rem}.actor.speaking{left:15%}.conversation{left:25%}.grid{grid-template-columns:1fr}.scene header h1{font-size:1.3rem}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+#panel-feedback:not(:empty){margin-top:.45rem;padding:.42rem .55rem;border:1px solid var(--edge);border-radius:.3rem;background:#273642;color:#ffe6b9}
+.ship-plan{position:relative;min-height:16rem;border:1px solid var(--edge);border-radius:1.8rem;background:radial-gradient(ellipse at center,#3b3528,#18232c 67%)}
+.ship-plan svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.ship-plan>div{position:absolute;left:var(--x);top:var(--y);transform:translate(-50%,-50%);max-width:28%;text-align:center}
+.ship-plan .btn{line-height:1.2}
+@media(max-width:600px){.ship-plan .btn{font-size:.69rem;padding:.25rem}}
