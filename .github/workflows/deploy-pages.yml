@@ -1,0 +1,66 @@
+name: Deploy TKGame to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "index.html"
+      - "src/**"
+      - "public/**"
+      - "assets/**"
+      - "games/**"
+      - "site/**"
+      - "package.json"
+      - "package-lock.json"
+      - "vite.config.*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build or prepare static site
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f package.json ]; then
+            if [ -f package-lock.json ]; then npm ci; else npm install; fi
+            npm run build
+            if [ ! -f dist/index.html ]; then
+              echo "Expected dist/index.html after build; adapt workflow for a different build output"
+              exit 1
+            fi
+            echo "PUBLISH_DIR=dist" >> "$GITHUB_ENV"
+          elif [ -f site/index.html ]; then
+            echo "PUBLISH_DIR=site" >> "$GITHUB_ENV"
+          elif [ -f index.html ]; then
+            echo "PUBLISH_DIR=." >> "$GITHUB_ENV"
+          else
+            echo "No game sources yet. Add source files / a static index.html before publishing."
+            exit 1
+          fi
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ env.PUBLISH_DIR }}
+      - id: deployment
+        uses: actions/deploy-pages@v4
