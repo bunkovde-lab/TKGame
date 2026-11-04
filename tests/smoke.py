@@ -1,13 +1,19 @@
+from pathlib import Path
+import os
 from playwright.sync_api import sync_playwright
-URL='file:///mnt/data/TKGame/site/index.html'
+ROOT = Path(__file__).resolve().parents[1]
+SITE = ROOT / 'site'
 with sync_playwright() as p:
-    browser=p.chromium.launch(headless=True,executable_path='/usr/bin/chromium',args=['--no-sandbox'])
+    chromium = os.environ.get('CHROMIUM_PATH', '/usr/bin/chromium')
+    opts = {'headless': True, 'args': ['--no-sandbox']}
+    if Path(chromium).exists(): opts['executable_path'] = chromium
+    browser=p.chromium.launch(**opts)
     page=browser.new_page(viewport={'width':1360,'height':820})
     errors=[]
     page.on('pageerror',lambda e: errors.append(str(e)))
-    page.set_content(open('/mnt/data/TKGame/site/index.html').read(),wait_until='domcontentloaded')
-    page.add_style_tag(content=open('/mnt/data/TKGame/site/styles.css').read())
-    page.add_script_tag(content=open('/mnt/data/TKGame/site/game.js').read())
+    page.set_content((SITE / 'index.html').read_text(encoding='utf-8'),wait_until='domcontentloaded')
+    page.add_style_tag(content=(SITE / 'styles.css').read_text(encoding='utf-8'))
+    page.add_script_tag(content=(SITE / 'game.js').read_text(encoding='utf-8'))
     def hit(label): page.locator('#hotspots button',has_text=label).click()
     def close(): page.locator('#close-dialog').click()
     hit('Реестр прибытия')
@@ -47,7 +53,7 @@ with sync_playwright() as p:
     page.locator('[data-answer=right]').click()
     page.locator('#protect').click()
     assert 'Имя, которого нет' in page.locator('#dialog-title').inner_text()
-    page.screenshot(path='/mnt/data/TKGame/test-desktop.png',full_page=True)
+    page.screenshot(path=str(ROOT / 'test-desktop.png'),full_page=True)
     assert not errors,errors
     browser.close()
     print('PASS: full detective flow, puzzles, clues, inventory, conditional interviews, 5 evidence links, ending; 0 page errors')
