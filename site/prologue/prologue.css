@@ -925,3 +925,58 @@ small, .muted { color: var(--muted); }
 @media (max-width: 760px) { .ending .intro-copy { left: .8rem; right: .8rem; width: auto; bottom: 1rem; } .slot { font-size: .64rem; padding: .1rem .4rem; } .top .clock { font-size: .7rem; } }
 .pulse-strip { grid-template-columns: minmax(4rem, 1fr) minmax(0, 2fr); }
 .pulse-strip span { white-space: normal; line-height: 1.25; }
+
+/* Чтение людей: линзы, пауза, цитаты, допрос */
+.lens-row { display: flex; gap: .35rem; flex-wrap: wrap; margin-top: .4rem; }
+.lens-row .btn.lens { min-height: 36px; padding: .3rem .7rem; font-size: .78rem; border-radius: 99px; }
+.lens-row .btn.lens b { font-weight: 400; }
+.btn.lens-pulse.on { background: #5a1f24 !important; border-color: #ff6b6b !important; color: #ffd1d1 !important; }
+.btn.lens-eyes.on { background: #1e3a2c !important; border-color: #6fdc9f !important; color: #d4ffe6 !important; }
+.btn.lens-voice.on { background: #1d2c4a !important; border-color: #7fb4ff !important; color: #dbe9ff !important; }
+.lens-strip { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: .55rem; padding: .3rem .6rem; border-radius: .4rem; font-size: .76rem; line-height: 1.3; animation: lens-in .35s var(--ease-out, ease-out); }
+.lens-strip.eyes { background: #0d1a14cc; border: 1px solid #6fdc9f44; color: #c8f5dc; }
+.lens-strip.eyes b { color: #6fdc9f; font-size: 1rem; }
+.lens-strip.eyes.hit { border-color: #6fdc9f; box-shadow: 0 0 12px #6fdc9f44; color: #fff; }
+.lens-strip.eyes.hit b { animation: eye-blink 1.2s ease-in-out infinite; }
+.lens-strip.voice { grid-template-columns: minmax(4rem, 1fr) minmax(0, 2fr); background: #0c1424cc; border: 1px solid #7fb4ff44; color: #cfe2ff; }
+.lens-strip.voice svg { width: 100%; height: 26px; }
+.lens-strip.voice rect { fill: #7fb4ff; transform-origin: center; animation: wave-bob 1.4s ease-in-out infinite alternate; }
+.lens-strip.voice rect:nth-child(3n) { animation-delay: -.5s; } .lens-strip.voice rect:nth-child(4n) { animation-delay: -.9s; }
+.lens-strip.voice rect.hot { fill: #ffd27f; animation-duration: .18s; }
+.lens-strip.voice.hit { border-color: #ffd27f; color: #fff2d6; }
+.lens-strip.voice.noisy rect { fill: #5b6576; animation-duration: .12s; }
+.lens-strip.voice.noisy { color: #9aa6b8; }
+@keyframes lens-in { from { opacity: 0; transform: translateY(-4px); } }
+@keyframes eye-blink { 0%, 80%, 100% { transform: scaleY(1); } 90% { transform: scaleY(.1); } }
+@keyframes wave-bob { to { transform: scaleY(.55); } }
+.pause-btn { border-style: dashed !important; }
+.quote-btn { border-color: #e5b879aa !important; color: var(--gold) !important; }
+.silence { display: grid; gap: .5rem; padding: .4rem 0; }
+.silence-fidget { margin: 0; font-style: italic; color: #d9cdb8; min-height: 1.3em; }
+.silence-fidget.pop { animation: lens-in .4s ease-out; }
+.silence-bar { position: relative; height: 8px; border-radius: 99px; background: #ffffff14; overflow: visible; }
+.silence-bar i { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: inherit; background: linear-gradient(90deg, #6f7f99, #e5b879); }
+.silence-bar u { position: absolute; top: -4px; bottom: -4px; left: var(--at); width: 2px; background: #6fdc9f; box-shadow: 0 0 6px #6fdc9f; }
+.silence .btn { justify-self: start; }
+.quote-list { display: grid; gap: .6rem; }
+.quote-card { display: grid; gap: .35rem; padding: .7rem .8rem; border-radius: .5rem; background: #ffffff08; border-left: 3px solid #7fb4ff; }
+.quote-card.slip { border-left-color: #6fdc9f; }
+.quote-card small { color: var(--muted, #9aa6b8); font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; }
+.quote-card q { font-style: italic; line-height: 1.4; }
+.quote-card .btn { justify-self: start; }
+.crew-manner { font-size: .8rem; color: #c8f5dc; margin: .3rem 0; }
+.crew-manner b { color: #6fdc9f; }
+.role-grid { display: grid; gap: .6rem; margin: .6rem 0; }
+.role-card { display: grid; gap: .3rem; text-align: left; padding: .75rem .9rem; border-radius: .6rem; border: 1px solid #e5b87955; background: #0b1119cc; color: inherit; font: inherit; cursor: pointer; transition: transform .2s, border-color .2s; }
+.role-card:hover { border-color: var(--gold); transform: translateY(-2px); }
+.role-card small { display: block; color: #9aa6b8; font-size: .74rem; }
+.role-card b.good { color: #6fdc9f; } .role-card b.bad { color: #ff8a7a; }
+.interro { display: grid; gap: .35rem; margin: .5rem 0 .2rem; }
+.gauge { display: grid; grid-template-columns: 7.5rem 1fr; align-items: center; gap: .5rem; font-size: .78rem; }
+.gauge-pips { display: flex; gap: .25rem; }
+.gauge-pips i { width: 1.4rem; height: .5rem; border-radius: 99px; background: #ffffff1c; transition: background .3s; }
+.gauge.fear .gauge-pips i.on { background: #ff8a7a; }
+.gauge.fear.hot .gauge-pips i.on { background: #ff4a3a; animation: dot-pulse 1s ease-in-out infinite; }
+.gauge.open .gauge-pips i.on { background: #6fdc9f; }
+.interro-step { color: #9aa6b8; }
+@media (prefers-reduced-motion: reduce) { .lens-strip, .lens-strip.voice rect, .lens-strip.eyes.hit b, .silence-fidget.pop { animation: none; } }
