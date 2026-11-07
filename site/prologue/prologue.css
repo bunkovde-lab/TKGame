@@ -455,3 +455,10 @@ small, .muted { color: var(--muted); }
 .pip { width: 2rem; height: 2rem; display: grid; place-items: center; border: 1px solid var(--edge); border-radius: .3rem; font-family: Georgia, serif; }
 .pip.on { border-color: var(--gold); color: var(--gold); }
 @media (prefers-reduced-motion: reduce) { .dial-marker.hit { animation: none; fill: #fff6dc; } }
+/* Шапка окна вместе с сообщением всегда видна при прокрутке */
+.panel-top { position: sticky; top: -.85rem; z-index: 2; background: #18232e; margin: -.85rem -.85rem 0; padding: .85rem .85rem .1rem; }
+.panel-top .panel-head { position: static; }
+.panel-top #panel-feedback:not(:empty) { margin-bottom: .45rem; }
+.desk-result { padding: .55rem .7rem; border: 1px solid #f08d76; border-radius: .35rem; background: #3a2520; color: #ffd9cf; animation: desk-shake .35s; }
+@keyframes desk-shake { 0%,100% { transform: none; } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+@media (prefers-reduced-motion: reduce) { .desk-result { animation: none; } }
