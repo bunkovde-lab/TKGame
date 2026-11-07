@@ -5,7 +5,14 @@
   const crewRooms = { mara: 'cockpit', corvin: 'lab', irena: 'analysis', rein: 'airlock' };
   const itemRooms = { badge: 'office', sample: 'lab' };
   const briefingDocuments = ['order', 'manifestPort', 'manifestInternal'];
-  const documentIds = [...briefingDocuments, 'analysis', 'lab', 'dalNote'];
+  const documentIds = [...briefingDocuments, 'analysis', 'lab', 'dalNote', 'irenaTrace', 'versions'];
+  const showRules = {
+    dalNote: { need: 1, high: { mara: 1, corvin: 1, irena: 1, rein: 1 }, low: { mara: -1, corvin: 0, irena: 0, rein: -1 } },
+    versions: { need: 0, high: { mara: 0, corvin: 0, irena: 0, rein: 0 }, low: { mara: 0, corvin: 0, irena: 0, rein: 0 } }
+  };
+  const showable = Object.keys(showRules);
+  const priorities = { person: 'mercy', suspect: 'law', exit: 'calc' };
+  const versionAnswer = { version: 3, field: 'cargo' };
   const replies = ['law', 'calc', 'mercy'];
   const crewIds = ['mara', 'corvin', 'irena', 'rein'];
   const replyLikes = { law: ['irena'], calc: ['mara', 'rein'], mercy: ['corvin'] };
@@ -26,7 +33,9 @@
       task: null, lab: false, deduction: false, routeNote: null,
       reply: null, path: { law: 0, calc: 0, mercy: 0 },
       trust: { mara: 0, corvin: 0, irena: 0, rein: 0 },
-      safeFound: false, safeOpen: false
+      safeFound: false, safeOpen: false,
+      shown: { mara: [], corvin: [], irena: [], rein: [] }, said: null,
+      priority: null, versions: false, dockStyle: null
     };
   }
 
@@ -48,6 +57,7 @@
   }
 
   function closeTalk(state) {
+    state.said = null;
     state.crew = null;
     state.topic = null;
     state.pose = 'neutral';
@@ -91,16 +101,23 @@
     state.safeFound = raw.safeFound === true;
     state.safeOpen = state.safeFound && raw.safeOpen === true;
     if (state.safeOpen) remember(state.documents, 'dalNote');
+    for (const id of crewIds) state.shown[id] = validArray(raw.shown?.[id], showable);
+    if (state.shown.irena.includes('dalNote') && state.documents.includes('dalNote') && raw.documents?.includes?.('irenaTrace')) remember(state.documents, 'irenaTrace');
+    state.priority = Object.hasOwn(priorities, raw.priority ?? '') ? raw.priority : null;
+    state.dockStyle = state.docked && ['clean', 'assisted'].includes(raw.dockStyle) ? raw.dockStyle : null;
     if (raw.task && int(raw.task.due)) {
       state.task = { due: raw.task.due, done: raw.task.done === true || state.tick >= raw.task.due };
       if (state.task.done) remember(state.documents, 'analysis');
     }
+    state.versions = state.task?.done === true && raw.versions === true;
+    if (state.versions) remember(state.documents, 'versions');
     if (state.accepted) briefingDocuments.forEach(id => remember(state.documents, id));
     if (state.lab) remember(state.documents, 'lab');
     if (crewRooms[raw.crew] === state.room) {
       state.crew = raw.crew;
       state.topic = int(raw.topic) ? raw.topic : null;
       state.pose = poses.includes(raw.pose) ? raw.pose : 'neutral';
+      if (raw.said && showable.includes(raw.said.doc) && ['high', 'low'].includes(raw.said.tone)) state.said = { doc: raw.said.doc, tone: raw.said.tone };
     }
     return state;
   }
@@ -145,6 +162,7 @@
       case 'talk':
         if (crewRooms[value] !== state.room) return fail('Собеседника нет в этой комнате.');
         state.crew = value;
+        state.said = null;
         state.topic = null;
         state.pose = 'neutral';
         return success();
@@ -153,6 +171,7 @@
         const topic = window.PROLOGUE_CONTENT?.crew?.[state.crew]?.topics?.[index];
         if (!Number.isInteger(index) || !topic) return fail('Реплика недоступна.');
         state.topic = index;
+        state.said = null;
         state.pose = poses.includes(topic.pose) ? topic.pose : 'neutral';
         return success();
       }
@@ -229,6 +248,39 @@
         remember(state.thoughts, 'dalNote');
         return success('Ящик открыт. Внутри записка Даля, она в журнале.', true);
       }
+      case 'show': {
+        const crewId = state.crew;
+        if (!crewId) return fail('Сначала начните разговор.');
+        if (!showable.includes(value) || !state.documents.includes(value)) return fail('Этот материал нельзя показать.');
+        if (state.shown[crewId].includes(value)) return fail('Вы уже показывали это.');
+        const rule = showRules[value];
+        const tone = state.trust[crewId] >= rule.need ? 'high' : 'low';
+        state.trust[crewId] = Math.max(-3, Math.min(3, state.trust[crewId] + rule[tone][crewId]));
+        remember(state.shown[crewId], value);
+        state.topic = null;
+        state.said = { doc: value, tone };
+        if (crewId === 'irena' && value === 'dalNote' && tone === 'high') remember(state.documents, 'irenaTrace');
+        const delta = rule[tone][crewId];
+        return success(delta > 0 ? 'Доверие выросло.' : delta < 0 ? 'Доверие упало.' : '');
+      }
+      case 'priority':
+        if (state.room !== 'airlock') return fail('Порядок эвакуации обсуждают с Рейном у шлюза.');
+        if (state.priority) return fail('Приоритет уже задан.');
+        if (!Object.hasOwn(priorities, value ?? '')) return fail('Выберите один приоритет.');
+        state.priority = value;
+        state.path[priorities[value]] += 1;
+        state.trust.rein = Math.min(3, state.trust.rein + 1);
+        return success('Рейн записал приоритет. Ему важно, что он один.');
+      case 'versions':
+        if (state.room !== 'analysis' || !state.task?.done) return fail('Журнал версий будет у Ирены после сверки.');
+        if (state.versions) return fail('Правка уже найдена.');
+        if (value?.version !== versionAnswer.version || value?.field !== versionAnswer.field) {
+          return fail('Эта правка не меняет смысла перевозки. Ищите, где изменилось содержание, а не оформление.');
+        }
+        state.versions = true;
+        remember(state.documents, 'versions');
+        state.trust.irena = Math.min(3, state.trust.irena + 1);
+        return success('Правка найдена. Ирена побледнела, увидев, чей это допуск.', true);
       case 'nav':
         if (state.room !== 'cockpit' || !state.accepted) return fail('Для расчёта маршрута нужны кабина и принятый приказ.');
         if (state.nav) return fail('Маршрут уже проложен.');
@@ -242,6 +294,9 @@
           return fail('Перед стыковкой примите приказ, проложите маршрут, предъявите допуск в шлюзе, откалибруйте сканер и дождитесь сверки Ирены.');
         }
         state.docked = true;
+        state.dockStyle = value === 'assisted' ? 'assisted' : 'clean';
+        if (value === 'clean') state.trust.mara = Math.min(3, state.trust.mara + 1);
+        if (value === 'assisted') state.trust.mara = Math.max(-3, state.trust.mara - 1);
         closeTalk(state);
         return success('Стыковка завершена.', true);
       default:
@@ -249,5 +304,5 @@
     }
   }
 
-  window.PROLOGUE_ENGINE = { fresh, restore, dispatch, adjacent, period, dockReady, labChannels, manifestFields, deskFields, replies, safeCode, dialSize, rooms };
+  window.PROLOGUE_ENGINE = { fresh, restore, dispatch, adjacent, period, dockReady, labChannels, manifestFields, deskFields, replies, safeCode, dialSize, rooms, showable, priorities };
 })();
