@@ -7,7 +7,26 @@
   const briefingDocuments = ['order', 'manifestPort', 'manifestInternal'];
   const secretDocs = { mara: 'secretMara', corvin: 'secretCorvin', irena: 'secretIrena', rein: 'secretRein' };
   const truthDocs = { mara: 'truthMara', corvin: 'truthCorvin', irena: 'truthIrena', rein: 'truthRein' };
-  const documentIds = [...briefingDocuments, 'analysis', 'lab', 'dalNote', 'irenaTrace', 'versions', 'dalAudio', ...Object.values(secretDocs), ...Object.values(truthDocs)];
+  const sceneDocs = ['breachLog', 'autopsy', 'routes'];
+  const documentIds = [...briefingDocuments, 'analysis', 'lab', 'dalNote', 'irenaTrace', 'versions', 'dalAudio', ...Object.values(secretDocs), ...Object.values(truthDocs), ...sceneDocs];
+  // Сцены с экипажем: флешбэк Рейна, медосмотр Корвина, карта Мары
+  const autopsyAnswer = { eyes: 'vacuum', skin: 'vacuum', skull: 'blow', wrists: 'blow', lungs: 'after' };
+  const autopsyClasses = ['vacuum', 'blow', 'after'];
+  const routeGraph = {
+    karfagen: ['tessa', 'vega'], tessa: ['karfagen', 'sirin', 'node9'], vega: ['karfagen', 'hollow', 'lunar'],
+    hollow: ['vega', 'sirin'], sirin: ['tessa', 'hollow', 'lunar', 'node9'], lunar: ['sirin', 'vega'], node9: ['sirin', 'tessa']
+  };
+  const maraRoute = ['karfagen', 'tessa', 'sirin', 'lunar'];
+  const dalRoute = ['vega', 'hollow', 'sirin', 'node9'];
+  const routeMeet = 'sirin';
+  const sceneCrew = { breach: 'rein', autopsy: 'corvin', routes: 'mara' };
+  function sceneOpen(state, id) {
+    const crewId = sceneCrew[id];
+    if (!crewId || state[id] || state.crew !== crewId) return false;
+    const ready = { breach: true, autopsy: state.lab, routes: state.nav }[id];
+    return Boolean(ready && (state.pulse[crewId] === 'revealed' || state.caught.includes(crewId) || state.trust[crewId] >= 1));
+  }
+  function scenesDone(state) { return ['breach', 'autopsy', 'routes'].filter(id => state[id]).length; }
   // Свидетель пульса: на каком базовом вопросе у каждого срывается пульс
   const pulseTriggers = { mara: 1, corvin: 2, irena: 2, rein: 1 };
   const pulseStates = ['seen', 'closed', 'revealed'];
@@ -40,11 +59,14 @@
   // Отношения по лору: профессиональное доверие, личная близость и поддержка методов — отдельно.
   const methodLikes = { mara: ['calc', 'law'], corvin: ['mercy', 'calc'], irena: ['law', 'mercy'], rein: ['calc', 'law'] };
   const axes = ['trust', 'close'];
-  const bondReasons = ['reply', 'show', 'priority', 'versions', 'lab', 'dock', 'memory', 'secret', 'pressure', 'argument', 'late', 'team', 'truth', 'quote'];
+  const bondReasons = ['reply', 'show', 'priority', 'versions', 'lab', 'dock', 'memory', 'secret', 'pressure', 'argument', 'late', 'team', 'truth', 'quote', 'breach', 'autopsy', 'routes', 'center'];
   const topicConditions = {
     lab: state => state.lab, deduction: state => state.deduction, safeOpen: state => state.safeOpen,
     versions: state => state.versions, priority: state => Boolean(state.priority), audio: state => state.audio,
-    irenaTrace: state => state.documents.includes('irenaTrace'), argument: state => Boolean(state.argument)
+    irenaTrace: state => state.documents.includes('irenaTrace'), argument: state => Boolean(state.argument),
+    breach: state => state.breach, breachLog: state => state.documents.includes('breachLog'),
+    autopsy: state => state.autopsy, routes: state => state.routes, center: state => Boolean(state.center),
+    truth: state => state.caught.length > 0
   };
   function topicList(state, crewId) {
     const crew = window.PROLOGUE_CONTENT?.crew?.[crewId];
@@ -125,7 +147,8 @@
       shown: { mara: [], corvin: [], irena: [], rein: [] }, said: null,
       priority: null, versions: false, dockStyle: null,
       pulse: { mara: null, corvin: null, irena: null, rein: null }, argument: null, audio: false, team: null, late: false,
-      quotes: [], tells: [], caught: [], quiet: false, roles: null, mira: null
+      quotes: [], tells: [], caught: [], quiet: false, roles: null, mira: null,
+      breach: false, autopsy: false, routes: false, center: null
     };
   }
 
@@ -218,6 +241,11 @@
     state.caught = validArray(raw.caught, crewIds).filter(id => state.quotes.includes(id + ':lie'));
     state.caught.forEach(id => remember(state.documents, truthDocs[id]));
     state.quiet = raw.quiet === true;
+    for (const id of ['breach', 'autopsy', 'routes']) state[id] = raw[id] === true;
+    if (state.breach && raw.documents?.includes?.('breachLog')) remember(state.documents, 'breachLog');
+    if (state.autopsy) remember(state.documents, 'autopsy');
+    if (state.routes) remember(state.documents, 'routes');
+    state.center = scenesDone(state) >= 2 && replies.includes(raw.center) ? raw.center : null;
     state.team = state.docked && Array.isArray(raw.team) && raw.team.length === 2 && new Set(raw.team).size === 2 && raw.team.every(id => crewIds.includes(id)) ? [...raw.team] : null;
     state.roles = state.team && raw.roles && state.team.includes(raw.roles.good) && state.team.includes(raw.roles.bad) && raw.roles.good !== raw.roles.bad
       ? { good: raw.roles.good, bad: raw.roles.bad } : null;
@@ -346,6 +374,53 @@
         bond(state, crewId, 'trust', -1, 'quote');
         state.said = { doc: 'truth', tone: 'low' };
         return success('Цитата ничего не опровергает.');
+      }
+      case 'breach': {
+        if (state.room !== 'airlock' || !sceneOpen(state, 'breach')) return fail('Рейн пока не готов об этом говорить.');
+        state.breach = true;
+        bond(state, 'rein', 'close', 1, 'breach');
+        state.topic = null;
+        state.said = null;
+        if (value?.lock === true) {
+          remember(state.documents, 'breachLog');
+          return success('Переборку сектора Б заблокировали дистанционно. Запись в журнале.', true);
+        }
+        return success('Рейн закончил рассказ.', true);
+      }
+      case 'autopsy': {
+        if (state.room !== 'lab' || !sceneOpen(state, 'autopsy')) return fail('Корвин пока не готов показывать заметки.');
+        const marks = value?.marks ?? {};
+        const keys = Object.keys(autopsyAnswer);
+        if (!keys.every(key => autopsyClasses.includes(marks[key]))) return fail('Отметьте каждое повреждение.');
+        const right = keys.filter(key => marks[key] === autopsyAnswer[key]).length;
+        if (right !== keys.length) return fail('Корвин качает головой: верно ' + right + ' из ' + keys.length + '. Смотрите, что могло случиться только с живым человеком.');
+        state.autopsy = true;
+        remember(state.documents, 'autopsy');
+        bond(state, 'corvin', 'trust', 1, 'autopsy');
+        state.topic = null;
+        state.said = null;
+        return success('Заключение записано в журнал.', true);
+      }
+      case 'routes': {
+        if (state.room !== 'cockpit' || !sceneOpen(state, 'routes')) return fail('Мара пока не готова открывать старые маршруты.');
+        const path = Array.isArray(value?.path) ? value.path : [];
+        if (path.join() !== maraRoute.join()) return fail('Маршрут не сходится с записями позывного.');
+        if (value?.meet !== routeMeet) return fail('Здесь маршруты не пересекаются в одно время.');
+        state.routes = true;
+        remember(state.documents, 'routes');
+        bond(state, 'mara', 'close', 1, 'routes');
+        state.topic = null;
+        state.said = null;
+        return success('Пересечение маршрутов записано в журнал.', true);
+      }
+      case 'center': {
+        if (scenesDone(state) < 2) return fail('Центр пока молчит.');
+        if (state.center) return fail('Ответ Центру уже отправлен.');
+        if (!replies.includes(value)) return fail('Выберите ответ.');
+        state.center = value;
+        state.path[value] += 1;
+        replyLikes[value].forEach(id => bond(state, id, 'trust', 1, 'center'));
+        return success('Ответ ушёл в Центр.');
       }
       case 'roles': {
         if (!state.team) return fail('Сначала соберите группу.');
@@ -552,5 +627,6 @@
   }
 
   window.PROLOGUE_ENGINE = { fresh, restore, dispatch, adjacent, period, dockReady, labChannels, manifestFields, deskFields, replies, safeCode, dialSize, rooms, showable, priorities, crewIds, methods, memoryOpen, methodLikes, topicList, pulseTriggers, secretDocs, audioFragments, slotDeadline,
+    sceneOpen, scenesDone, autopsyAnswer, autopsyClasses, routeGraph, maraRoute, dalRoute, routeMeet,
     voiceTopics, pauseTopics, pauseBreak, slipTargets, truthDocs, goodFit, badFit, interrogate, noisy, roleFit };
 })();

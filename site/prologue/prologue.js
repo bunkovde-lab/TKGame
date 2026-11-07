@@ -173,6 +173,108 @@ function completeTyping(){
 }
 let lens=null;
 let silence=null;
+/* Сцены экипажа */
+const breachRooms=['sector','archive','post','corridor','airlock'];
+let breach=null, breachMsg='';
+function breachReset(){if(breach?.timer)clearInterval(breach.timer);breach={t:0,running:false,doors:[false,false,false,false],front:0,pos:2,lock:breach?.lock||false,timer:0,over:''};}
+function breachStart(){breachReset();breach.running=true;breach.start=performance.now();breachMsg='';breach.timer=setInterval(breachTick,100);paintPanel();}
+function breachStop(){if(breach?.timer){clearInterval(breach.timer);breach.timer=0;}if(breach)breach.running=false;}
+function breachTick(){
+  const B=breach;if(!B||!B.running)return;
+  if(activePanel!=='breach'){breachStop();breach=null;return;}
+  B.t=(performance.now()-B.start)/1000;
+  const want=B.t<2.5?2:B.t<6?3:4;
+  while(B.pos<want&&!B.doors[B.pos])B.pos++;
+  const nextAt=3+4*B.front;
+  if(B.front<4&&B.t>=nextAt&&!B.doors[B.front]){B.front++;haptic(false,30);sfx.thump?.();}
+  const contained=B.doors.some((closed,d)=>closed&&d>=B.front);
+  if(B.pos<=B.front)B.over='leak';
+  if(!B.over&&B.pos===4&&contained){breachStop();const r=run('breach',{lock:B.lock});if(r.ok){sfx.open();haptic(true,[40,60,40]);}return;}
+  if(B.over){breachStop();breachMsg=C.scenes.breach.lose[B.over];sfx.fail();shake();haptic(true,[120,60,120]);paintPanel();return;}
+  breachSync();
+}
+// Во время сцены обновляем только живые части, чтобы кнопки переборок не пересоздавались под пальцем
+function breachSync(){
+  const B=breach;const board=dialog.querySelector('.breach-board');if(!board)return;
+  board.querySelectorAll('.br-room').forEach((el,i)=>{el.classList.toggle('leak',i<=B.front);el.querySelector('.br-who').innerHTML=breachWho(i);});
+  const time=dialog.querySelector('.br-time');if(time)time.textContent=B.t.toFixed(1)+' с';
+  const tech=dialog.querySelector('.br-tech');if(tech)tech.hidden=!(B.t>4&&B.t<9);
+}
+function breachWho(i){const B=breach;return (i===1?'<i class="tech" title="Техник">◆</i>':'')+(i===B.pos?'<i class="ppl">●</i><i class="ppl">●</i>':'')+(i===4?'<i class="rein" title="Рейн">▲</i>':'');}
+function breachDoor(d){
+  const B=breach;if(!B||!B.running)return;
+  if(d===0){B.lock=true;breachMsg=C.scenes.breach.locked;sfx.fail();haptic(true,[60,40,60]);paintPanel();return;}
+  if(B.doors[d])return;
+  B.doors[d]=true;sfx.click(true);haptic(true,40);
+  // Переборка перед выжившими отрезает их от шлюза
+  if(d>=B.pos&&B.pos<4){B.over='trap';breachStop();breachMsg=C.scenes.breach.lose.trap;sfx.fail();shake();}
+  paintPanel();
+}
+function breachBody(){
+  const S=C.scenes.breach;
+  if(state.breach)return p(S.intro)+card(S.win,p(state.documents.includes('breachLog')?S.afterLock:S.after));
+  if(!breach)breachReset();
+  const B=breach;
+  const rows=breachRooms.map((id,i)=>{
+    return '<div class="br-room'+(i<=B.front?' leak':'')+'"><span>'+esc(S.rooms[id])+'</span><span class="br-who">'+breachWho(i)+'</span></div>'+
+      (i<4?'<div class="br-door'+(B.doors[i]?' shut':'')+(i===0?' locked':'')+'"><span>'+esc(S.door)+'</span><button type="button" class="btn" data-act="breach-door" data-value="'+i+'"'+(B.doors[i]||!B.running?' disabled':'')+'>'+esc(B.doors[i]?S.closed:S.close)+'</button></div>':'');
+  }).join('');
+  return p(S.intro)+'<p class="br-help">'+esc(S.help)+'</p>'+'<p class="br-tech"'+(B.t>4&&B.t<9&&B.running?'':' hidden')+'>'+esc(S.tech)+'</p>'+
+    '<div class="breach-board'+(B.running?' live':'')+'">'+rows+'</div>'+
+    (breachMsg?'<p class="br-msg'+(B.lock&&breachMsg===S.locked?' lock':'')+'">'+esc(breachMsg)+'</p>':'')+
+    (B.running?'<div class="br-time">'+B.t.toFixed(1)+' с</div>':'<div class="actions">'+btn('breach-start','',breachMsg&&B.over?'Ещё раз':S.start,{primary:true})+'</div>');
+}
+let autopsyMarks={}, autopsyResult='';
+function autopsyBody(){
+  const A=C.scenes.autopsy;
+  if(state.autopsy)return p(A.intro)+card('Вывод',p(A.after));
+  const pos={eyes:[50,13],skin:[44,18],skull:[56,8],wrists:[22,52],lungs:[50,33]};
+  const keys=Object.keys(A.marks);
+  const fig='<svg class="body-fig" viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="13" r="8"/><rect x="38" y="23" width="24" height="32" rx="6"/><rect x="26" y="25" width="7" height="28" rx="3" transform="rotate(10 29 25)"/><rect x="67" y="25" width="7" height="28" rx="3" transform="rotate(-10 71 25)"/><rect x="40" y="56" width="8" height="38" rx="3"/><rect x="52" y="56" width="8" height="38" rx="3"/>'+
+    keys.map((k,i)=>'<g class="bmark'+(autopsyMarks[k]?' set':'')+'"><circle cx="'+pos[k][0]+'" cy="'+pos[k][1]+'" r="3.4"/><text x="'+pos[k][0]+'" y="'+(pos[k][1]+1.3)+'">'+(i+1)+'</text></g>').join('')+'</svg>';
+  const list=keys.map((k,i)=>'<div class="amark"><strong>'+(i+1)+'. '+esc(A.marks[k].label)+'</strong><small>'+esc(A.marks[k].text)+'</small><div class="seg-row">'+
+    Object.entries(A.classes).map(([c,label])=>'<button type="button" class="seg'+(autopsyMarks[k]===c?' on':'')+'" data-act="autopsy-mark" data-value="'+k+'|'+c+'" aria-pressed="'+(autopsyMarks[k]===c)+'">'+esc(label)+'</button>').join('')+'</div></div>').join('');
+  return p(A.intro)+(state.trust.corvin>=1?'<p class="scene-hint">'+esc(A.hint)+'</p>':'')+'<div class="autopsy">'+fig+'<div class="amarks">'+list+'</div></div>'+
+    (autopsyResult?'<p class="br-msg">'+esc(autopsyResult)+'</p>':'')+
+    '<div class="actions">'+btn('autopsy-check','',A.check,{primary:true,disabled:keys.some(k=>!autopsyMarks[k])})+'</div>';
+}
+let routePath=[], routeMsg='';
+function routesBody(){
+  const R=C.scenes.routes;
+  if(state.routes)return p(R.intro)+card('Пересечение',p(R.after));
+  const meet=routePath.join()===E.maraRoute.join();
+  const N=R.nodes;const xy=id=>[N[id][1],N[id][2]];
+  const edges=[];for(const [a,list] of Object.entries(E.routeGraph))for(const b of list)if(a<b)edges.push([a,b]);
+  const line=(a,b,cls)=>'<line class="'+cls+'" x1="'+xy(a)[0]+'" y1="'+xy(a)[1]+'" x2="'+xy(b)[0]+'" y2="'+xy(b)[1]+'"/>';
+  const pathLines=routePath.slice(1).map((id,i)=>line(routePath[i],id,'mara')).join('');
+  const dalLines=meet?E.dalRoute.slice(1).map((id,i)=>line(E.dalRoute[i],id,'dal-lane')).join(''):'';
+  const nodes=Object.keys(N).map(id=>{const [x,y]=xy(id);const on=routePath.includes(id);
+    return '<g class="rnode'+(on?' on':'')+(meet&&E.dalRoute.includes(id)?' dal':'')+'" data-act="route-node" data-value="'+id+'" role="button" tabindex="0" aria-label="'+esc(N[id][0])+'"><circle cx="'+x+'" cy="'+y+'" r="4.2"/><text x="'+N[id][3]+'" y="'+N[id][4]+'" text-anchor="'+N[id][5]+'">'+esc(N[id][0])+'</text></g>';}).join('');
+  return p(R.intro)+'<ol class="clues">'+R.clues.map(c=>'<li>'+esc(c)+'</li>').join('')+'</ol>'+
+    '<svg class="star-map" viewBox="0 0 100 80">'+edges.map(([a,b])=>line(a,b,'lane')).join('')+dalLines+pathLines+nodes+'</svg>'+
+    '<p class="scene-hint">'+esc(meet?R.stepMeet:R.stepPath)+'</p>'+(routeMsg?'<p class="br-msg">'+esc(routeMsg)+'</p>':'')+
+    '<div class="actions">'+btn('route-reset','',R.reset,{disabled:!routePath.length})+'</div>';
+}
+function routeTap(id){
+  if(state.routes)return;
+  if(routePath.join()===E.maraRoute.join()){
+    const r=run('routes',{path:routePath.slice(),meet:id});
+    if(r.ok){sfx.open();haptic(true,[40,60,40]);}else{routeMsg=r.message;sfx.fail();haptic(true,[90,50,90]);paintPanel();}
+    return;
+  }
+  routeMsg='';
+  if(routePath.includes(id)){return;}
+  if(routePath.length&&!E.routeGraph[routePath.at(-1)].includes(id)){routeMsg='Между этими точками нет линии.';sfx.fail();paintPanel();return;}
+  routePath.push(id);sfx.click(false);
+  if(routePath.length===E.maraRoute.length&&routePath.join()!==E.maraRoute.join()){routeMsg='Маршрут не сходится с записями. Начните сначала.';sfx.fail();haptic(true,[90,50,90]);}
+  paintPanel();
+}
+function centerBody(){
+  const X=C.center;
+  return p(X.text)+(state.center?card(X.options[state.center].label,p(X.after[state.center])):
+    '<div class="reply-choices">'+E.replies.map(id=>'<button type="button" class="btn reply-choice" data-act="center" data-value="'+id+'"><strong>'+esc(X.options[id].label)+'</strong><span>'+esc(X.options[id].note)+'</span></button>').join('')+'</div>');
+}
+let centerOffered=false;
 let miraSteps=[];
 const waveSeed=Array.from({length:60},(_,i)=>Math.round(5+Math.abs(Math.sin(i*2.3)*Math.cos(i*.71))*16));
 function voicePath(tremble,noise){
@@ -266,7 +368,7 @@ function quotesBody(){
 function objectiveDone(id){
   return ({accept:state.accepted,deduction:state.deduction,lab:state.lab,task:Boolean(state.task?.done),reader:state.reader,nav:state.nav,dock:state.docked&&!state.late,
     safe:state.safeOpen,audio:state.audio,versions:state.versions,argument:Boolean(state.argument),
-    secrets:E.crewIds.every(id=>state.pulse[id]==='revealed'),truths:state.caught.length===4,memory:state.heard.length>0})[id];
+    secrets:E.crewIds.every(id=>state.pulse[id]==='revealed'),truths:state.caught.length===4,breach:state.breach,autopsy:state.autopsy,routes:state.routes,memory:state.heard.length>0})[id];
 }
 function ecgPath(spike){
   let d='M0 15';const beat=spike?22:40;
@@ -304,7 +406,7 @@ function renderEnding(){
   }
   const pre=[...C.mira.lines.slice(0,1),
     state.team.map(id=>C.bonds.short[id]+' '+C.team.picked[crewMood(id)]).join(' ')+' '+E.crewIds.filter(id=>!state.team.includes(id)).map(id=>C.bonds.short[id]+' '+C.team.stays[crewMood(id)]).join(' '),
-    ...C.mira.lines.slice(1),state.team.map(id=>C.mira.byTeam[id]).join(' ')];
+    ...C.mira.lines.slice(1),state.team.map(id=>C.mira.byTeam[id]).join(' ')+(state.center?' '+C.mira.byCenter[state.center]:'')];
   const pages=[...pre,...(state.mira?[C.interro.outcome[state.mira],C.mira.hook]:[])];
   if(miraPage>=pre.length&&!state.mira){renderInterrogation();return;}
   if(miraPage<pages.length){
@@ -320,7 +422,7 @@ function renderEnding(){
     '<div class="res-block"><h3>Путь командира</h3><div class="res-path">'+E.replies.map(id=>'<span class="'+(id===best?'on':'')+'">'+esc(C.pathNames[id])+' <b>'+state.path[id]+'</b></span>').join('')+'</div></div>'+
     '<div class="res-block"><h3>Экипаж</h3><ul class="crew-summary">'+E.crewIds.map(id=>'<li><strong>'+esc(C.bonds.short[id])+'</strong> '+esc(C.bonds.ending[crewMood(id)])+(state.pulse[id]==='revealed'?' <em>Секрет доверен.</em>':'')+(state.caught.includes(id)?' <em>Правда сказана.</em>':'')+'</li>').join('')+'</ul></div>'+
     '<div class="res-block"><h3>Улики · '+found.length+' из '+R.evidence.length+'</h3><p class="res-small">'+esc(found.map(id=>C.documents[id].title).join(' · '))+'</p>'+(missed.length?'<p class="res-small missed">Упущено: '+esc(missed.map(id=>C.documents[id].title).join(' · '))+'</p>':'')+'</div>'+
-    '<div class="res-block"><h3>Подход</h3><p class="res-small">'+esc(state.late?R.late:R.onTime)+' '+esc(R[state.dockStyle]||'')+(state.argument?' Спор: '+esc(C.argument.options[state.argument].label)+'.':'')+(state.mira?' '+esc(C.interro.result[state.mira]):'')+'</p></div></div>';
+    '<div class="res-block"><h3>Подход</h3><p class="res-small">'+esc(state.late?R.late:R.onTime)+' '+esc(R[state.dockStyle]||'')+(state.argument?' Спор: '+esc(C.argument.options[state.argument].label)+'.':'')+(state.mira?' '+esc(C.interro.result[state.mira]):'')+(state.center?' '+esc(C.center.result[state.center]):'')+'</p></div></div>';
   endingFrame('results','dock','Конец пролога',R.title,'',body,btn('restart','','Начать пролог заново',{primary:true})+btn('title-menu','','Главное меню'));
 }
 function renderInterrogation(){
@@ -449,7 +551,8 @@ function render() {
     (state.crew==='mara'||state.crew==='rein')&&state.nav&&state.reader&&!state.argument?btn('panel','argument','Решить спор о подходе'):'',
     state.topic!=null?'<button type="button" class="btn pause-btn" data-act="silence" data-value="">… '+esc(C.pause.label)+'</button>':'',
     state.quotes.length&&!state.caught.includes(state.crew)?'<button type="button" class="btn quote-btn" data-act="panel" data-value="quotes">❝ '+esc(C.quotes.label)+'</button>':'',
-    lens==='voice'&&E.noisy(state)?btn('quiet','',C.voice.quiet):''
+    lens==='voice'&&E.noisy(state)?btn('quiet','',C.voice.quiet):'',
+    ...['breach','autopsy','routes'].filter(id=>E.sceneOpen(state,id)).map(id=>'<button type="button" class="btn scene-btn" data-act="panel" data-value="'+id+'">✦ '+esc(C.scenes[id].button)+'</button>')
   ].join(''):'';
   const pulseStrip=crew?lensStrip():'';
   const lensBtns=crew?'<div class="lens-row" role="group" aria-label="Чтение людей">'+Object.entries(C.lenses).map(([id,l])=>'<button type="button" class="btn lens lens-'+id+(lens===id?' on':'')+'" data-act="lens" data-value="'+id+'" aria-pressed="'+(lens===id)+'"><b aria-hidden="true">'+l.icon+'</b> '+esc(l.label)+'</button>').join('')+'</div>':'';
@@ -505,7 +608,10 @@ function run(act,input,value){
     persist();
     render();
     if(activePanel)paintPanel();
-    if(!argumentOffered&&state.nav&&state.reader&&!state.argument&&!state.docked&&(state.room==='cockpit'||state.room==='office')&&!state.crew){
+    if(!centerOffered&&E.scenesDone(state)>=2&&!state.center&&!state.docked&&!state.crew){
+      centerOffered=true;setTimeout(()=>{if(!activePanel&&!state.center){sfx.rumble?.();openPanel('center');}},1100);
+    }
+    else if(!argumentOffered&&state.nav&&state.reader&&!state.argument&&!state.docked&&(state.room==='cockpit'||state.room==='office')&&!state.crew){
       argumentOffered=true;setTimeout(()=>{if(!activePanel&&!state.argument)openPanel('argument');},900);
     }
   }
@@ -1052,6 +1158,10 @@ function paintPanel() {
         }).join('')+'</div>'+p(C.rooms[state.room].description);
       break;
     }
+    case 'breach': title=C.scenes.breach.title; body=breachBody(); break;
+    case 'autopsy': title=C.scenes.autopsy.title; body=autopsyBody(); break;
+    case 'routes': title=C.scenes.routes.title; body=routesBody(); break;
+    case 'center': title=C.center.title; body=centerBody(); break;
     case 'quotes':
       title=C.quotes.title;
       body=quotesBody();
@@ -1079,7 +1189,7 @@ function paintPanel() {
     case 'journal':
     case 'diary':
       title=activePanel==='diary'?'Личный дневник':'Журнал задания';
-      body=activePanel==='diary'?C.diary.map(item=>card(item.title,p(item.text))).join(''):
+      body=activePanel==='diary'?[...C.diary,...(E.scenesDone(state)>=2?[C.scenes.pattern]:[])].map(item=>card(item.title,p(item.text))).join(''):
         objectivesCard()+
         (state.quotes.length?'<div class="actions">'+btn('panel','quotes',C.quotes.title+' · '+state.quotes.length)+'</div>':'')+
         '<div class="actions">'+state.documents.map(id=>btn('read',id,C.documents[id].title)).join('')+'</div>'+
@@ -1143,6 +1253,13 @@ document.addEventListener('click',event=>{
   if(['topic','pulse','eyes','voice'].includes(act)&&state.crew)askedTopics.add(state.crew+':'+value);
   if(act==='lens'){lens=lens===value?null:value;haptic(false,12);render();return;}
   if(act==='silence'){startSilence();return;}
+  if(act==='breach-start'){breachStart();return;}
+  if(act==='breach-door'){breachDoor(Number(value));return;}
+  if(act==='autopsy-mark'){const [k,c]=value.split('|');autopsyMarks[k]=c;autopsyResult='';paintPanel();return;}
+  if(act==='autopsy-check'){const r=run('autopsy',{marks:{...autopsyMarks}});if(r.ok){sfx.open();haptic(true,[40,60,40]);}else{autopsyResult=r.message;sfx.fail();haptic(true,[90,50,90]);paintPanel();}return;}
+  if(act==='route-node'){routeTap(value);return;}
+  if(act==='route-reset'){routePath=[];routeMsg='';paintPanel();return;}
+  if(act==='center'){sfx.wake();}
   if(act==='silence-stop'){if(silence)endSilence((performance.now()-silence.start)/1000);return;}
   if(act==='confront'){closePanel();const r=run('confront',value);if(r.ok&&state.said?.tone==='high'){sfx.open();haptic(true,[40,60,40]);}else if(r.ok){sfx.fail();shake();}return;}
   if(act==='role-set'){const [good,bad]=value.split('|');run('roles',{good,bad});return;}
@@ -1210,7 +1327,7 @@ document.addEventListener('click',event=>{
   if(act==='save'){notify(persist(manualKey)?'Ручное сохранение записано.':'Сохранение недоступно.');return;}
   if(act==='restart'){openPanel('confirm-new');return;}
   if(act==='restart-yes'){
-    state=E.fresh();titleOpen=false;typedKeys.clear();askedTopics.clear();seenBonds=0;lastCrew=null;lens=null;stopSilence();miraSteps=[];argumentOffered=false;teamPick=[];miraPage=0;audioFound=[];audioPos=0;audioFreq=50;
+    state=E.fresh();titleOpen=false;typedKeys.clear();askedTopics.clear();seenBonds=0;lastCrew=null;lens=null;stopSilence();miraSteps=[];argumentOffered=false;centerOffered=false;breachStop();breach=null;breachMsg='';autopsyMarks={};autopsyResult='';routePath=[];routeMsg='';teamPick=[];miraPage=0;audioFound=[];audioPos=0;audioFreq=50;
     speechPage=0;thoughtOpen=false;links=[];pendingLink=null;pickFrom=null;dialEntered=[];dialRot=0;documentId='';labResult='';versionResult='';memoryOn=false;
     closePanel();persist();render();
     return;
