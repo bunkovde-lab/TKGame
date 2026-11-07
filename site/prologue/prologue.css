@@ -396,3 +396,11 @@ small, .muted { color: var(--muted); }
 .ship-plan{width:min(100%,60dvh);aspect-ratio:3/2;min-height:0;margin:auto;background-size:100% 100%}
 .conversation .reply{display:flex;gap:.35rem;flex-wrap:wrap}
 .conversation .reply .btn{flex:1 1 11rem;text-align:left}
+/* Телефон: имя и должность, подписи у края, собеседник в кадре */
+.conversation .speaker { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: .55rem; row-gap: .1rem; }
+.hotspot { left: clamp(3.4rem, var(--x), calc(100% - 3.4rem)); }
+.hotspot span { white-space: nowrap; }
+@media (max-width: 760px) {
+  .scene.has-crew { --art-position: 72% 54%; }
+  .scene.has-crew .embedded-actor { --actor-x: 74%; --actor-width: 42%; }
+}
