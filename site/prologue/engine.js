@@ -16,6 +16,27 @@
   const replies = ['law', 'calc', 'mercy'];
   const crewIds = ['mara', 'corvin', 'irena', 'rein'];
   const replyLikes = { law: ['irena'], calc: ['mara', 'rein'], mercy: ['corvin'] };
+  // Отношения по лору: профессиональное доверие, личная близость и поддержка методов — отдельно.
+  const methodLikes = { mara: ['calc', 'law'], corvin: ['mercy', 'calc'], irena: ['law', 'mercy'], rein: ['calc', 'law'] };
+  const axes = ['trust', 'close'];
+  const bondReasons = ['reply', 'show', 'priority', 'versions', 'lab', 'dock', 'memory'];
+  const clamp = value => Math.max(-3, Math.min(3, value));
+  function bond(state, crewId, axis, delta, why) {
+    if (!delta) return;
+    const before = state[axis][crewId];
+    state[axis][crewId] = clamp(before + delta);
+    const applied = state[axis][crewId] - before;
+    if (!applied) return;
+    state.bondLog.push({ crew: crewId, axis, delta: applied, why });
+    if (state.bondLog.length > 200) state.bondLog.splice(0, state.bondLog.length - 200);
+  }
+  function methods(state, crewId) {
+    const [like, dislike] = methodLikes[crewId];
+    return clamp(state.path[like] - state.path[dislike]);
+  }
+  function memoryOpen(state, crewId) {
+    return state.trust[crewId] >= 2 || state.close[crewId] >= 1;
+  }
   const deskFields = ['voyage', 'route', 'cargo', 'time'];
   const deskAnswer = ['cargo|cargo|diff', 'voyage|voyage|same'];
   const safeCode = [6, 9, 4];
@@ -33,6 +54,8 @@
       task: null, lab: false, deduction: false, routeNote: null,
       reply: null, path: { law: 0, calc: 0, mercy: 0 },
       trust: { mara: 0, corvin: 0, irena: 0, rein: 0 },
+      close: { mara: 0, corvin: 0, irena: 0, rein: 0 },
+      bondLog: [], heard: [],
       safeFound: false, safeOpen: false,
       shown: { mara: [], corvin: [], irena: [], rein: [] }, said: null,
       priority: null, versions: false, dockStyle: null
@@ -94,10 +117,15 @@
     state.routeNote = state.nav ? 'Лунный арбитраж' : null;
     state.reply = replies.includes(raw.reply) ? raw.reply : null;
     for (const id of replies) state.path[id] = int(raw.path?.[id]) ? Math.min(raw.path[id], 99) : 0;
-    for (const id of crewIds) {
-      const value = raw.trust?.[id];
-      state.trust[id] = Number.isSafeInteger(value) ? Math.max(-3, Math.min(3, value)) : 0;
+    for (const axis of axes) for (const id of crewIds) {
+      const value = raw[axis]?.[id];
+      state[axis][id] = Number.isSafeInteger(value) ? clamp(value) : 0;
     }
+    state.bondLog = Array.isArray(raw.bondLog) ? raw.bondLog.filter(entry => entry && crewIds.includes(entry.crew) &&
+      axes.includes(entry.axis) && Number.isSafeInteger(entry.delta) && Math.abs(entry.delta) <= 6 && bondReasons.includes(entry.why))
+      
+      .slice(-200).map(({ crew, axis, delta, why }) => ({ crew, axis, delta, why })) : [];
+    state.heard = validArray(raw.heard, crewIds);
     state.safeFound = raw.safeFound === true;
     state.safeOpen = state.safeFound && raw.safeOpen === true;
     if (state.safeOpen) remember(state.documents, 'dalNote');
@@ -149,7 +177,7 @@
         state.accepted = true;
         state.reply = value;
         state.path[value] += 1;
-        replyLikes[value].forEach(id => { state.trust[id] = Math.min(3, state.trust[id] + 1); });
+        replyLikes[value].forEach(id => bond(state, id, 'trust', 1, 'reply'));
         briefingDocuments.forEach(id => remember(state.documents, id));
         return success('Ответ отправлен в Центр. Обе ведомости доступны на рабочем столе.');
       case 'move':
@@ -173,6 +201,19 @@
         state.topic = index;
         state.said = null;
         state.pose = poses.includes(topic.pose) ? topic.pose : 'neutral';
+        return success();
+      }
+      case 'memory': {
+        const crewId = state.crew;
+        if (!crewId) return fail('Сначала начните разговор.');
+        if (!memoryOpen(state, crewId)) return fail('Об этом пока не говорят с новым командиром.');
+        state.topic = null;
+        state.said = null;
+        state.pose = 'neutral';
+        if (!state.heard.includes(crewId)) {
+          remember(state.heard, crewId);
+          bond(state, crewId, 'close', 1, 'memory');
+        }
         return success();
       }
       case 'end-talk':
@@ -204,10 +245,11 @@
       case 'calibrate':
         if (state.room !== 'lab' || !state.sampleReady) return fail('Установите кассету в лабораторный сканер.');
         if (state.lab) return fail('Калибровка уже записана.');
-        if (value !== 'baseline') return fail('Этот профиль не совпадает с эталоном. Сравните форму сигнала.');
+        if (value !== 'baseline' && value !== 'precise') return fail('Этот профиль не совпадает с эталоном. Сравните форму сигнала.');
         state.lab = true;
         remember(state.documents, 'lab');
-        return success('Калибровка завершена. Результат записан в журнал.', true);
+        if (value === 'precise') bond(state, 'corvin', 'trust', 1, 'lab');
+        return success(value === 'precise' ? 'Калибровка идеальная. Корвин молча кивнул.' : 'Калибровка завершена. Результат записан в журнал.', true);
       case 'read':
         if (!state.documents.includes(value)) return fail('Материал пока недоступен.');
         remember(state.reviewed, value);
@@ -255,13 +297,13 @@
         if (state.shown[crewId].includes(value)) return fail('Вы уже показывали это.');
         const rule = showRules[value];
         const tone = state.trust[crewId] >= rule.need ? 'high' : 'low';
-        state.trust[crewId] = Math.max(-3, Math.min(3, state.trust[crewId] + rule[tone][crewId]));
+        bond(state, crewId, 'trust', rule[tone][crewId], 'show');
+        if (value === 'dalNote') bond(state, crewId, 'close', tone === 'high' ? 1 : -1, 'show');
         remember(state.shown[crewId], value);
         state.topic = null;
         state.said = { doc: value, tone };
         if (crewId === 'irena' && value === 'dalNote' && tone === 'high') remember(state.documents, 'irenaTrace');
-        const delta = rule[tone][crewId];
-        return success(delta > 0 ? 'Доверие выросло.' : delta < 0 ? 'Доверие упало.' : '');
+        return success();
       }
       case 'priority':
         if (state.room !== 'airlock') return fail('Порядок эвакуации обсуждают с Рейном у шлюза.');
@@ -269,7 +311,7 @@
         if (!Object.hasOwn(priorities, value ?? '')) return fail('Выберите один приоритет.');
         state.priority = value;
         state.path[priorities[value]] += 1;
-        state.trust.rein = Math.min(3, state.trust.rein + 1);
+        bond(state, 'rein', 'trust', 1, 'priority');
         return success('Рейн записал приоритет. Ему важно, что он один.');
       case 'versions':
         if (state.room !== 'analysis' || !state.task?.done) return fail('Журнал версий будет у Ирены после сверки.');
@@ -279,7 +321,7 @@
         }
         state.versions = true;
         remember(state.documents, 'versions');
-        state.trust.irena = Math.min(3, state.trust.irena + 1);
+        bond(state, 'irena', 'trust', 1, 'versions');
         return success('Правка найдена. Ирена побледнела, увидев, чей это допуск.', true);
       case 'nav':
         if (state.room !== 'cockpit' || !state.accepted) return fail('Для расчёта маршрута нужны кабина и принятый приказ.');
@@ -295,8 +337,7 @@
         }
         state.docked = true;
         state.dockStyle = value === 'assisted' ? 'assisted' : 'clean';
-        if (value === 'clean') state.trust.mara = Math.min(3, state.trust.mara + 1);
-        if (value === 'assisted') state.trust.mara = Math.max(-3, state.trust.mara - 1);
+        bond(state, 'mara', 'trust', value === 'clean' ? 1 : value === 'assisted' ? -1 : 0, 'dock');
         closeTalk(state);
         return success('Стыковка завершена.', true);
       default:
@@ -304,5 +345,5 @@
     }
   }
 
-  window.PROLOGUE_ENGINE = { fresh, restore, dispatch, adjacent, period, dockReady, labChannels, manifestFields, deskFields, replies, safeCode, dialSize, rooms, showable, priorities };
+  window.PROLOGUE_ENGINE = { fresh, restore, dispatch, adjacent, period, dockReady, labChannels, manifestFields, deskFields, replies, safeCode, dialSize, rooms, showable, priorities, crewIds, methods, memoryOpen, methodLikes };
 })();
