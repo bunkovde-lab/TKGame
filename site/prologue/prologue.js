@@ -171,15 +171,93 @@ function completeTyping(){
   cancelAnimationFrame(t.raf);t.i=t.full.length;paintTyped();
   t.host?.classList.remove('typing');typedKeys.add(t.key);typing=null;
 }
+let pulseOn=false;
+let argumentOffered=false;
+let teamPick=[];
+let miraPage=0;
+let audioPos=0, audioFreq=50, audioFound=[];
+const waveBars=Array.from({length:90},(_,i)=>Math.round(6+Math.abs(Math.sin(i*1.7)*Math.cos(i*.37))*22+(i*7%5)));
+function audioState(){
+  let best=null;
+  for(const [id,f] of Object.entries(C.audio.fragments)){
+    const dp=Math.abs(audioPos-f.pos),df=Math.abs(audioFreq-f.freq);
+    if(dp>9)continue;
+    const clarity=Math.max(0,1-dp/9*.55-df/40*.6);
+    if(!best||clarity>best.clarity)best={id,clarity,text:f.text};
+  }
+  return best;
+}
+function garble(text,clarity){
+  let seed=7;return [...text].map(ch=>{seed=(seed*37+11)%101;return ch===' '||seed/101<clarity?ch:'·';}).join('');
+}
+function audioBody(){
+  const A=C.audio;const cur=audioState();
+  return p(A.prompt)+'<div class="audio-card card"><svg class="wave" viewBox="0 0 180 40" preserveAspectRatio="none" aria-hidden="true">'+
+    waveBars.map((h,i)=>'<rect x="'+(i*2)+'" y="'+(20-h/2)+'" width="1.3" height="'+h+'" class="'+(Object.values(A.fragments).some(f=>audioFound.includes(Object.keys(A.fragments).find(k=>A.fragments[k]===f))&&Math.abs(i/90*100-f.pos)<4)?'got':'')+'"/>').join('')+
+    '<line id="wave-head" x1="'+(audioPos*1.8)+'" x2="'+(audioPos*1.8)+'" y1="0" y2="40"/></svg>'+
+    '<label class="lab-slider">Позиция записи<input type="range" id="audio-pos" min="0" max="100" step="0.5" value="'+audioPos+'"></label>'+
+    '<label class="lab-slider">Фильтр помех<input type="range" id="audio-freq" min="0" max="100" step="1" value="'+audioFreq+'"></label>'+
+    '<p class="audio-text" id="audio-text">'+esc(cur?garble(cur.text,cur.clarity):'…шипение…')+'</p>'+
+    '<div class="audio-found">'+Object.keys(A.fragments).map(id=>'<span class="'+(audioFound.includes(id)?'on':'')+'">'+(audioFound.includes(id)?'«'+esc(A.fragments[id].text)+'»':'Фрагмент не найден')+'</span>').join('')+'</div></div>';
+}
+function objectiveDone(id){
+  return ({accept:state.accepted,deduction:state.deduction,lab:state.lab,task:Boolean(state.task?.done),reader:state.reader,nav:state.nav,dock:state.docked&&!state.late,
+    safe:state.safeOpen,audio:state.audio,versions:state.versions,argument:Boolean(state.argument),
+    secrets:E.crewIds.every(id=>state.pulse[id]==='revealed'),memory:state.heard.length>0})[id];
+}
+function ecgPath(spike){
+  let d='M0 15';const beat=spike?22:40;
+  for(let x=0;x<200;x+=beat){d+=' L'+(x+beat*.35)+' 15 L'+(x+beat*.42)+' '+(spike?2:8)+' L'+(x+beat*.5)+' '+(spike?28:21)+' L'+(x+beat*.58)+' 15';}
+  return d+' L200 15';
+}
+function objectivesCard(){
+  const secrets=E.crewIds.filter(id=>state.pulse[id]==='revealed').length;
+  const row=([id,label])=>'<li class="'+(objectiveDone(id)?'done':'')+'"><b>'+(objectiveDone(id)?'✓':'○')+'</b>'+esc(label)+(id==='secrets'?' ('+secrets+'/4)':'')+'</li>';
+  return '<article class="card objectives"><h3>Цели</h3><ul>'+C.objectives.main.map(row).join('')+'</ul><h3>Необязательно</h3><ul class="side">'+C.objectives.side.map(row).join('')+'</ul></article>';
+}
+function currentObjective(){return C.objectives.main.find(([id])=>!objectiveDone(id))?.[1]??'';}
 function topBar(withTabs){
   const unread=state.documents.some(id=>!state.reviewed.includes(id));
   const crewNew=state.bondLog.length>seenBonds;
   const tabs=withTabs?'<nav class="tabs" aria-label="Разделы">'+[['hero','Герой'],['crew','Экипаж'],['inventory','Вещи'],['journal','Журнал'],['map','Карта'],['ship','Шаттл']].map(([id,label])=>
     '<button type="button" class="tab" data-act="panel" data-value="'+id+'">'+ico(id)+'<span>'+label+'</span>'+((id==='journal'&&unread)||(id==='crew'&&crewNew)?'<i class="dot" aria-label="есть новое"></i>':'')+'</button>').join('')+'</nav>':'';
   return '<header class="top'+(withTabs?'':' bare')+'"><div class="brand"><span><b>◈</b> Мир Раскола</span><small>Пролог · Приказ</small></div>'+tabs+
-    '<div class="meta"><span class="clock">'+ico('clock')+esc(E.period(state.tick))+'</span><button type="button" class="icon-btn" data-act="panel" data-value="system" aria-label="Меню">'+ico('menu')+'</button></div></header>';
+    '<div class="meta">'+(withTabs&&state.accepted&&!state.docked?'<span class="slot'+(E.slotDeadline-state.tick<=1?' warn':'')+'" title="Сколько единиц времени порт держит слот стыковки">Слот: '+(state.tick>E.slotDeadline?'упущен':'ещё '+(E.slotDeadline-state.tick+1))+'</span>':'')+'<span class="clock">'+ico('clock')+esc(E.period(state.tick))+'</span><button type="button" class="icon-btn" data-act="panel" data-value="system" aria-label="Меню">'+ico('menu')+'</button></div></header>';
 }
 function sceneEnter(key){const changed=key!==lastSceneKey;lastSceneKey=key;return changed&&!reduceMotion?' enter':'';}
+function endingFrame(key,art,kicker,title,text,extra,actions){
+  app.innerHTML='<main class="game">'+topBar(false)+'<section class="scene intro ending typing-host'+sceneEnter(key)+'" style="--art:url(assets/'+art+'.webp)"><div class="scene-art kb">'+fxLayer(art)+'</div><canvas class="dust-fx" aria-hidden="true"></canvas><div class="bars" aria-hidden="true"><i></i><i></i></div>'+
+    '<div class="intro-copy"><div class="kicker">'+esc(kicker)+'</div><h1>'+esc(title)+'</h1>'+(text?tw(text,key,'narrator'):'')+'<div class="after-type">'+extra+'<div class="actions">'+actions+'</div></div></div></section></main>';
+  lastCrew=null;
+  startTyping();
+}
+function crewMood(id){const score=state.trust[id]+state.close[id]+E.methods(state,id);return score>=3?'high':score>=0?'mid':'low';}
+function renderEnding(){
+  if(!state.team){
+    const text=[state.late?C.docking.late:C.docking[state.dockStyle],C.team.prompt].filter(Boolean).join(' ');
+    const cards='<div class="team-grid">'+E.crewIds.map(id=>'<button type="button" class="team-card'+(teamPick.includes(id)?' on':'')+'" data-act="team-pick" data-value="'+id+'" aria-pressed="'+teamPick.includes(id)+'"><strong>'+esc(C.crew[id].name)+'</strong><small>'+esc(C.team.roles[id])+'</small><span class="mood mood-'+(state.trust[id]>0?'up':state.trust[id]<0?'down':'flat')+'">'+esc(C.bonds.levels.trust[String(state.trust[id])])+'</span></button>').join('')+'</div>';
+    endingFrame('team','dock','Стыковка завершена',C.team.title,text,cards,btn('team-go','','Идём · '+teamPick.length+'/2',{primary:true,disabled:teamPick.length!==2}));
+    return;
+  }
+  const pages=[...C.mira.lines.slice(0,1),
+    state.team.map(id=>C.bonds.short[id]+' '+C.team.picked[crewMood(id)]).join(' ')+' '+E.crewIds.filter(id=>!state.team.includes(id)).map(id=>C.bonds.short[id]+' '+C.team.stays[crewMood(id)]).join(' '),
+    ...C.mira.lines.slice(1),state.team.map(id=>C.mira.byTeam[id]).join(' '),C.mira.hook];
+  if(miraPage<pages.length){
+    endingFrame('mira-'+miraPage,'intro-0','Пролог · финал',C.mira.title,pages[miraPage],'<div class="progress-dots" aria-hidden="true">'+pages.map((_,i)=>'<i class="'+(i<=miraPage?'on':'')+'"></i>').join('')+'</div>',
+      btn('mira-next','',miraPage===pages.length-1?'К итогам ▸':'Дальше ▸',{primary:true}));
+    return;
+  }
+  const R=C.results;
+  const found=R.evidence.filter(id=>state.documents.includes(id));
+  const missed=R.evidence.filter(id=>!state.documents.includes(id));
+  const best=E.replies.reduce((a,b)=>state.path[b]>state.path[a]?b:a);
+  const body='<div class="results">'+
+    '<div class="res-block"><h3>Путь командира</h3><div class="res-path">'+E.replies.map(id=>'<span class="'+(id===best?'on':'')+'">'+esc(C.pathNames[id])+' <b>'+state.path[id]+'</b></span>').join('')+'</div></div>'+
+    '<div class="res-block"><h3>Экипаж</h3><ul class="crew-summary">'+E.crewIds.map(id=>'<li><strong>'+esc(C.bonds.short[id])+'</strong> '+esc(C.bonds.ending[crewMood(id)])+(state.pulse[id]==='revealed'?' <em>Секрет доверен.</em>':'')+'</li>').join('')+'</ul></div>'+
+    '<div class="res-block"><h3>Улики · '+found.length+' из '+R.evidence.length+'</h3><p class="res-small">'+esc(found.map(id=>C.documents[id].title).join(' · '))+'</p>'+(missed.length?'<p class="res-small missed">Упущено: '+esc(missed.map(id=>C.documents[id].title).join(' · '))+'</p>':'')+'</div>'+
+    '<div class="res-block"><h3>Подход</h3><p class="res-small">'+esc(state.late?R.late:R.onTime)+' '+esc(R[state.dockStyle]||'')+(state.argument?' Спор: '+esc(C.argument.options[state.argument].label)+'.':'')+'</p></div></div>';
+  endingFrame('results','dock','Конец пролога',R.title,'',body,btn('restart','','Начать пролог заново',{primary:true})+btn('title-menu','','Главное меню'));
+}
 function renderTitle(){
   const canContinue=state.intro>0;
   app.innerHTML='<main class="game title-screen"><section class="scene intro title'+sceneEnter('title')+'" style="--art:url(assets/intro-0.webp)"><div class="scene-art kb">'+fxLayer('intro-0')+'</div><canvas class="dust-fx" aria-hidden="true"></canvas><div class="bars" aria-hidden="true"><i></i><i></i></div><div class="dust" aria-hidden="true">'+'<i></i>'.repeat(16)+'</div>'+
@@ -197,7 +275,7 @@ function settingsBody(){
 }
 const thoughts = {badge:'Мой допуск имеет силу здесь, на борту. В порту это прежде всего способ представиться.',sample:'Пустой сканер тоже может показать красивую картинку. Мне нужен известный образец, чтобы ей поверить.',order:'Центр назвал срок и объект проверки. Остальное мне придётся добыть на месте.',deduction:'Совпал рейс. Разошлась причина перевозки. Теперь нужно понять, кто мог менять запись.',trace:C.safe.trace,dalNote:C.safe.note};
 const fixtures = {
-  office:[['terminal','Терминал Центра',54,43],['desk','Рабочий стол',39,63],['badge','Идентификатор',28,77],['diary','Личный дневник',11,59],['trace','След на столе',84,40],['safe','Ящик стола',66,66]],
+  office:[['terminal','Терминал Центра',54,43],['desk','Рабочий стол',39,63],['badge','Идентификатор',28,77],['diary','Личный дневник',11,59],['trace','След на столе',84,40],['safe','Ящик стола',66,66],['recorder','Регистратор Даля',78,22]],
   cockpit:[['map','Карта и маршрут',34,53],['docking','Панель стыковки',59,67]],
   lab:[['lab','Криминалистический сканер',36,52],['sample','Контрольная кассета',54,67]],
   analysis:[['analysis','Пост аналитика',35,52]],
@@ -240,7 +318,8 @@ function actor(crewId) {
 }
 function render() {
   if(titleOpen){renderTitle();startTyping();return;}
-  if (state.intro<C.intro.length || state.docked) {
+  if (state.docked) {renderEnding();return;}
+  if (state.intro<C.intro.length) {
     const end=state.docked;
     const frame=end?{title:'Стыковка завершена',text:(C.docking[state.dockStyle]?C.docking[state.dockStyle]+' ':'')+'У вас есть приказ, рабочая версия и материалы экипажа. Первое дело начнётся за этой дверью.'}:C.intro[state.intro];
     const crewSummary=end?'<ul class="crew-summary">'+E.crewIds.map(id=>{const score=state.trust[id]+state.close[id]+E.methods(state,id);
@@ -260,18 +339,19 @@ function render() {
   const exits=E.adjacent(state.room).map(id=>'<button type="button" class="btn exit" data-act="move" data-value="'+id+'"><span aria-hidden="true">↗</span> '+esc(C.rooms[id].name)+'</button>').join('');
   const hotspots=fixtures[state.room].filter(([id])=>id!=='safe'||state.safeFound).map(([id,label,x,y],index)=>{
     const object=C.items[id];
-    const done=object&&state.inventory.includes(id);
+    const done=(object&&state.inventory.includes(id)&&id!=='recorder')||(id==='recorder'&&state.audio)||(id==='safe'&&state.safeOpen);
     return '<button class="hotspot'+(done?' done':'')+'" style="--x:'+x+'%;--y:'+y+'%;--i:'+index+'" data-act="panel" data-value="'+id+'"><b aria-hidden="true">'+(done?'✓':'◇')+'</b><span>'+esc(label)+'</span></button>';
   }).join('');
   const crew=state.crew && C.crew[state.crew];
-  const topic=crew?.topics[state.topic];
+  const topicsAll=crew?E.topicList(state,state.crew):[];
+  const topic=topicsAll[state.topic];
   const pages=topic?.answer.match(/[^.!?]+(?:[.!?]+|$)/gu)?.reduce((list,sentence)=>{
     if (list.length && list.at(-1).length+sentence.length<145) list[list.length-1]+=sentence;
     else list.push(sentence.trimStart());
     return list;
   },[]) ?? [];
   const hasMore=speechPage<pages.length-1;
-  const line=crew?((memoryOn&&C.bonds.memories[state.crew]) || (state.said&&C.show[state.said.doc]?.[state.crew]?.[state.said.tone]) || (pages[speechPage] ?? (state.reply&&C.reactions[state.crew]?.[state.reply]) ?? crew.greeting ?? 'Командир. Слушаю вас.')):'';
+  const line=crew?((memoryOn&&C.bonds.memories[state.crew]) || (state.said?.doc==='secret'&&C.secrets[state.crew][state.said.tone==='high'?'confess':'refuse']) || (state.said&&C.show[state.said.doc]?.[state.crew]?.[state.said.tone]) || (pages[speechPage] ?? (state.reply&&C.reactions[state.crew]?.[state.reply]) ?? crew.greeting ?? 'Командир. Слушаю вас.')):'';
   const talkEnter=crew&&state.crew!==lastCrew&&!reduceMotion?' enter':'';
   const cam=reduceMotion?'':talkEnter?' cam-in':!crew&&lastCrew?' cam-out':'';
   lastCrew=state.crew;
@@ -279,20 +359,25 @@ function render() {
     state.crew==='irena'?btn('assign','','Поручить проверку ведомости',{disabled:!state.deduction||Boolean(state.task)}):'',
     state.crew==='rein'&&!state.priority?btn('panel','evacuation','Порядок эвакуации'):'',
     ...E.showable.filter(doc=>state.documents.includes(doc)&&!state.shown[state.crew].includes(doc)).map(doc=>btn('show',doc,C.show[doc].label)),
-    E.memoryOpen(state,state.crew)?btn('memory','',C.bonds.memoryLabel,{disabled:memoryOn}):''
+    E.memoryOpen(state,state.crew)?btn('memory','',C.bonds.memoryLabel,{disabled:memoryOn}):'',
+    ['seen','closed'].includes(state.pulse[state.crew])?'<button type="button" class="btn press" data-act="press" data-value="">'+esc(C.pulse.press)+'</button>':'',
+    (state.crew==='mara'||state.crew==='rein')&&state.nav&&state.reader&&!state.argument?btn('panel','argument','Решить спор о подходе'):''
   ].join(''):'';
+  const spike=crew&&state.pulse[state.crew]==='seen'&&state.topic===E.pulseTriggers[state.crew];
+  const pulseStrip=crew&&pulseOn?'<div class="pulse-strip'+(spike?' spike':'')+'"><svg viewBox="0 0 200 30" preserveAspectRatio="none" aria-hidden="true"><path d="'+ecgPath(spike)+'"/></svg><span>'+esc(state.topic==null?C.pulse.hint:spike?C.pulse.spike:C.pulse.calm)+'</span></div>':'';
   const conversation=crew?'<section class="conversation typing-host'+talkEnter+'" aria-label="Разговор">'+
     '<div class="nameplate"><strong class="speaker-name">'+esc(crew.name)+'</strong><span class="speaker-role">'+esc(crew.role)+'</span><span class="mood mood-'+(state.trust[state.crew]>0?'up':state.trust[state.crew]<0?'down':'flat')+'">'+esc(C.bonds.levels.trust[String(state.trust[state.crew])])+'</span>'+
       '<button type="button" class="icon-btn talk-close" data-act="end-talk" aria-label="Завершить разговор">'+ico('close')+'</button></div>'+
-    tw(line,'c:'+state.crew+':'+line,state.crew)+
+    pulseStrip+tw(line,'c:'+state.crew+':'+line,state.crew)+
     '<div class="after-type"><div class="reply">'+(hasMore?'<button type="button" class="btn primary next" data-act="speech-next">Дальше ▸</button>':
-      crew.topics.map((entry,index)=>'<button type="button" class="choice'+(askedTopics.has(state.crew+':'+index)?' asked':'')+'" data-act="topic" data-value="'+index+'" style="--i:'+index+'"><b>'+(index+1)+'</b><span>'+esc(entry.question)+'</span></button>').join(''))+'</div>'+
-    '<div class="conversation-tools">'+tools+btn('panel','crew-bio','Отношения')+'</div></div></section>':'';
+      topicsAll.filter(entry=>entry.open).map((entry,n)=>'<button type="button" class="choice'+(askedTopics.has(state.crew+':'+entry.index)?' asked':'')+(entry.when&&!askedTopics.has(state.crew+':'+entry.index)?' fresh':'')+'" data-act="'+(pulseOn?'pulse':'topic')+'" data-value="'+entry.index+'" style="--i:'+n+'"><b>'+(n+1)+'</b><span>'+esc(entry.question)+'</span>'+(entry.when&&!askedTopics.has(state.crew+':'+entry.index)?'<em>новое</em>':'')+'</button>').join(''))+'</div>'+
+    '<div class="conversation-tools"><button type="button" class="btn pulse-toggle'+(pulseOn?' on':'')+'" data-act="pulse-mode" data-value="" aria-pressed="'+pulseOn+'">♥ '+esc(C.pulse.label)+'</button>'+tools+btn('panel','crew-bio','Отношения')+'</div></div></section>':'';
+  const goal=!crew&&currentObjective()?'<div class="goal"><span>Цель</span>'+esc(currentObjective())+'</div>':'';
   const thought=!crew&&thoughtOpen?'<div class="thought typing-host'+(reduceMotion?'':' enter')+'"><div class="kicker">Внутренний голос</div>'+tw(room.thought,'t:'+state.room,'thought')+'<div class="after-type">'+btn('dismiss-thought','','Продолжить')+'</div></div>':'';
   const sceneArt=crewId ? 'scene-'+state.room : 'room-'+state.room;
   app.innerHTML='<main class="game">'+topBar(true)+'<section class="scene '+(crew?'scene-speaking ':'')+(crewId?'has-crew':'')+cam+sceneEnter('room-'+state.room)+'" aria-label="'+esc(room.name)+'" style="--art:url(assets/'+sceneArt+'.webp)"><div class="scene-art">'+fxLayer(state.room)+'</div><canvas class="dust-fx" aria-hidden="true"></canvas><div class="bars top-only" aria-hidden="true"><i></i></div>'+
     (roomCard?'<div class="room-card" aria-hidden="true"><small>Шаттл · '+esc(E.period(state.tick))+'</small><strong>'+esc(room.name)+'</strong></div>':'')+
-    '<header><div class="kicker">Шаттл · '+esc(E.period(state.tick))+'</div><h1>'+esc(room.name)+'</h1></header>'+
+    '<header><div class="kicker">Шаттл · '+esc(E.period(state.tick))+'</div><h1>'+esc(room.name)+'</h1>'+goal+'</header>'+
     (crew?'':hotspots+(crewId?actor(crewId):''))+
     conversation+thought+(crew?'':'<nav class="exits" aria-label="Двери">'+exits+'</nav>')+
     '</section></main>';
@@ -327,9 +412,13 @@ function run(act,input,value){
     if(act==='dock')closePanel();
     if(act==='read')documentId=value;
     if(act==='deduce'){links=[];pendingLink=null;}
+    if(act==='end-talk')pulseOn=false;
     persist();
     render();
     if(activePanel)paintPanel();
+    if(!argumentOffered&&state.nav&&state.reader&&!state.argument&&!state.docked&&(state.room==='cockpit'||state.room==='office')&&!state.crew){
+      argumentOffered=true;setTimeout(()=>{if(!activePanel&&!state.argument)openPanel('argument');},900);
+    }
   }
   notify(result.message);
   return result;
@@ -610,6 +699,18 @@ function labBody(){
 }
 let labLastHit=false;
 dialog.addEventListener('input',event=>{
+  if(event.target.id==='audio-pos'||event.target.id==='audio-freq'){
+    if(event.target.id==='audio-pos')audioPos=Number(event.target.value);else audioFreq=Number(event.target.value);
+    const cur=audioState();
+    document.getElementById('wave-head')?.setAttribute('x1',audioPos*1.8);document.getElementById('wave-head')?.setAttribute('x2',audioPos*1.8);
+    const out=document.getElementById('audio-text');if(out)out.textContent=cur?garble(cur.text,cur.clarity):'…шипение…';
+    if(cur&&cur.clarity>.88&&!audioFound.includes(cur.id)){
+      audioFound.push(cur.id);sfx.wake();sfx.click(true);haptic(true,[30,40,30]);
+      if(audioFound.length===Object.keys(C.audio.fragments).length){const r=run('listen',audioFound.slice());if(r.ok)sfx.open();}
+      else paintPanel();
+    } else if(cur&&Math.random()<.3)sfx.blip('narrator');
+    return;
+  }
   if(event.target.id==='lab-shift')labShift=Number(event.target.value);
   else if(event.target.id==='lab-gain')labGain=Number(event.target.value);
   else return;
@@ -826,6 +927,20 @@ function paintPanel() {
       ].map(([ok,label])=>p((ok?'✓ ':'○ ')+label)).join(''))+btn('panel','approach','Начать подход',{disabled:!E.dockReady(state)||state.room!=='cockpit',primary:true})+
       (state.task&&!state.task.done?btn('wait','','Дождаться результата'):'');
       break;
+    case 'argument': {
+      const A=C.argument;
+      title=A.title;
+      const avatar=id=>'<img class="avatar" src="assets/crew-'+id+'.webp" alt="">';
+      body=p(A.setup)+'<div class="argue-lines">'+A.lines.map(([id,text],i)=>'<div class="argue-line '+(i%2?'right':'left')+'" style="--i:'+i+'">'+avatar(id)+'<div><strong>'+esc(C.bonds.short[id])+'</strong><p>'+esc(text)+'</p></div></div>').join('')+'</div>'+
+        (state.argument?card('Решение: '+A.options[state.argument].label,p(A.after[state.argument])):
+          '<div class="reply-choices">'+Object.keys(A.options).map(id=>{const locked=id==='both'&&state.trust.mara+state.trust.rein<2;
+            return '<button type="button" class="btn reply-choice" data-act="argue" data-value="'+id+'"'+(locked?' disabled':'')+'><strong>'+esc(A.options[id].label)+'</strong><span>'+esc(A.options[id].note)+(locked?' Сейчас доверия не хватает.':'')+'</span></button>';}).join('')+'</div>');
+      break;
+    }
+    case 'recorder':
+      title=C.audio.title;
+      body=state.audio?card(C.documents.dalAudio.title,'<p class="sheet">'+esc(C.documents.dalAudio.text)+'</p>'):audioBody();
+      break;
     case 'evacuation':
       title='Порядок эвакуации';
       body=state.priority?card('Приоритет: '+C.evacuation.options[state.priority].label,p(C.evacuation.reply[state.priority])):
@@ -870,7 +985,7 @@ function paintPanel() {
     case 'diary':
       title=activePanel==='diary'?'Личный дневник':'Журнал задания';
       body=activePanel==='diary'?C.diary.map(item=>card(item.title,p(item.text))).join(''):
-        card('Текущее задание',p(!state.accepted?'Примите приказ в кабинете.':!state.deduction?'Сопоставьте ведомости на рабочем столе.':!state.task?.done?'Поручите Ирене проверить источник и дождитесь результата.':'Завершите подготовку и подтвердите стыковку.'))+
+        objectivesCard()+
         '<div class="actions">'+state.documents.map(id=>btn('read',id,C.documents[id].title)).join('')+'</div>'+
         (C.documents[documentId]?card(C.documents[documentId].title,'<p class="sheet">'+esc(C.documents[documentId].text)+'</p>'):'')+
         (state.thoughts.length?card('Мысли командира',state.thoughts.map(entry=>C.rooms[entry]?.thought ?? thoughts[entry]).filter(Boolean).map(p).join('')):'');
@@ -929,7 +1044,13 @@ document.addEventListener('click',event=>{
   if(act==='set-sound'){settings.sound=value==='1';saveSettings();if(settings.sound){sfx.wake();sfx.click(true);}sfx.ambient(ambientWanted);paintPanel();return;}
   if(act==='set-vibro'){settings.vibro=value==='1';saveSettings();haptic(true,40);paintPanel();return;}
   if(act==='set-speed'){settings.speed=value;saveSettings();paintPanel();return;}
-  if(act==='topic'&&state.crew)askedTopics.add(state.crew+':'+value);
+  if((act==='topic'||act==='pulse')&&state.crew)askedTopics.add(state.crew+':'+value);
+  if(act==='pulse-mode'){pulseOn=!pulseOn;sfx.thump?.();render();return;}
+  if(act==='press'||act==='argue')sfx.wake();
+  if(act==='team-pick'){teamPick=teamPick.includes(value)?teamPick.filter(id=>id!==value):[...teamPick,value].slice(-2);render();return;}
+  if(act==='team-go'){if(run('team',teamPick.slice()).ok){miraPage=0;}return;}
+  if(act==='mira-next'){miraPage++;render();return;}
+  if(act==='topic'||act==='pulse'){const n=Number(value);run(act,n,value);return;}
   if(act==='panel'){
     if(value==='desk'){pendingLink=null;pickFrom=null;}
     if(value==='safe'){dialEntered=[];}
@@ -982,7 +1103,7 @@ document.addEventListener('click',event=>{
   if(act==='save'){notify(persist(manualKey)?'Ручное сохранение записано.':'Сохранение недоступно.');return;}
   if(act==='restart'){openPanel('confirm-new');return;}
   if(act==='restart-yes'){
-    state=E.fresh();titleOpen=false;typedKeys.clear();askedTopics.clear();seenBonds=0;lastCrew=null;
+    state=E.fresh();titleOpen=false;typedKeys.clear();askedTopics.clear();seenBonds=0;lastCrew=null;pulseOn=false;argumentOffered=false;teamPick=[];miraPage=0;audioFound=[];audioPos=0;audioFreq=50;
     speechPage=0;thoughtOpen=false;links=[];pendingLink=null;pickFrom=null;dialEntered=[];dialRot=0;documentId='';labResult='';versionResult='';memoryOn=false;
     closePanel();persist();render();
     return;
