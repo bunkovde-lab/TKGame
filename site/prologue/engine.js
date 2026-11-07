@@ -6,10 +6,25 @@
   const itemRooms = { badge: 'office', sample: 'lab' };
   const briefingDocuments = ['order', 'manifestPort', 'manifestInternal'];
   const secretDocs = { mara: 'secretMara', corvin: 'secretCorvin', irena: 'secretIrena', rein: 'secretRein' };
-  const documentIds = [...briefingDocuments, 'analysis', 'lab', 'dalNote', 'irenaTrace', 'versions', 'dalAudio', ...Object.values(secretDocs)];
+  const truthDocs = { mara: 'truthMara', corvin: 'truthCorvin', irena: 'truthIrena', rein: 'truthRein' };
+  const documentIds = [...briefingDocuments, 'analysis', 'lab', 'dalNote', 'irenaTrace', 'versions', 'dalAudio', ...Object.values(secretDocs), ...Object.values(truthDocs)];
   // Свидетель пульса: на каком базовом вопросе у каждого срывается пульс
   const pulseTriggers = { mara: 1, corvin: 2, irena: 2, rein: 1 };
   const pulseStates = ['seen', 'closed', 'revealed'];
+  // Голос: на каком вопросе дрожит голос (ложь попадает в блокнот цитат). Шлюз шумит, пока не заглушить вентиляцию.
+  const voiceTopics = { mara: 0, corvin: 2, irena: 0, rein: 1 };
+  const noisyRooms = ['airlock'];
+  // Взгляд и пауза: на каком вопросе собеседнику неловко и сколько секунд он выдерживает тишину
+  const pauseTopics = { mara: 2, corvin: 1, irena: 1, rein: 2 };
+  const pauseBreak = { mara: 2.5, corvin: 4, irena: 3.5, rein: 6 };
+  // Оговорка в паузе одного опровергает ложь другого
+  const slipTargets = { irena: 'mara', corvin: 'rein', rein: 'corvin', mara: 'irena' };
+  const quoteIds = ['mara', 'corvin', 'irena', 'rein'].flatMap(id => [id + ':lie', id + ':slip']);
+  // Хороший и плохой: кто как держит роль на допросе Миры
+  const goodFit = { mara: 1, corvin: 2, irena: 0, rein: 1 };
+  const badFit = { mara: 1, corvin: 0, irena: 2, rein: 2 };
+  const miraMoves = ['good', 'bad', 'self'];
+  const miraOutcomes = ['full', 'partial', 'shut'];
   const audioFragments = ['a', 'b', 'c'];
   const slotDeadline = 12;
   const showRules = {
@@ -25,7 +40,7 @@
   // Отношения по лору: профессиональное доверие, личная близость и поддержка методов — отдельно.
   const methodLikes = { mara: ['calc', 'law'], corvin: ['mercy', 'calc'], irena: ['law', 'mercy'], rein: ['calc', 'law'] };
   const axes = ['trust', 'close'];
-  const bondReasons = ['reply', 'show', 'priority', 'versions', 'lab', 'dock', 'memory', 'secret', 'pressure', 'argument', 'late', 'team'];
+  const bondReasons = ['reply', 'show', 'priority', 'versions', 'lab', 'dock', 'memory', 'secret', 'pressure', 'argument', 'late', 'team', 'truth', 'quote'];
   const topicConditions = {
     lab: state => state.lab, deduction: state => state.deduction, safeOpen: state => state.safeOpen,
     versions: state => state.versions, priority: state => Boolean(state.priority), audio: state => state.audio,
@@ -62,6 +77,39 @@
   const manifestFields = deskFields;
   const poses = ['neutral', 'focus', 'guarded'];
 
+  function noisy(state) { return noisyRooms.includes(state.room) && !state.quiet; }
+  function roleFit(state, id, role) {
+    return Math.max(0, (role === 'good' ? goodFit : badFit)[id] - (state.trust[id] < 0 ? 1 : 0));
+  }
+  // Допрос Миры: страх 0..5, откровенность 0..3. Сочувствие снимает страх, давление работает, только когда она не в панике.
+  function interrogate(state, roles, moves) {
+    let fear = 3, open = 0, done = false, outcome = null;
+    const steps = [];
+    for (const move of moves) {
+      if (done || !miraMoves.includes(move)) return { fear, open, steps, done, outcome, invalid: true };
+      const who = move === 'self' ? null : roles[move];
+      let result;
+      if (move === 'good') {
+        const fit = roleFit(state, who, 'good');
+        fear = Math.max(0, fear - fit);
+        result = fit ? 'goodOk' : 'goodWeak';
+        if (fear <= 1) open += 1;
+      } else if (move === 'bad') {
+        const fit = roleFit(state, who, 'bad');
+        if (fear >= 3) { fear += 2; result = 'badPanic'; }
+        else { open += fit; fear += 1; result = fit ? 'badOk' : 'badWeak'; }
+      } else if (fear <= 2) { open += 1; result = 'selfOk'; }
+      else { fear += 1; result = 'selfFear'; }
+      open = Math.min(3, open);
+      fear = Math.min(5, fear);
+      steps.push({ move, who, result });
+      if (fear >= 5) { done = true; outcome = 'shut'; }
+      else if (open >= 3) { done = true; outcome = 'full'; }
+      else if (steps.length >= 4) { done = true; outcome = open >= 1 ? 'partial' : 'shut'; }
+    }
+    return { fear, open, steps, done, outcome, invalid: false };
+  }
+
   function fresh() {
     return {
       version: 1, intro: 0, room: 'office', tick: 6, accepted: false,
@@ -76,7 +124,8 @@
       safeFound: false, safeOpen: false,
       shown: { mara: [], corvin: [], irena: [], rein: [] }, said: null,
       priority: null, versions: false, dockStyle: null,
-      pulse: { mara: null, corvin: null, irena: null, rein: null }, argument: null, audio: false, team: null, late: false
+      pulse: { mara: null, corvin: null, irena: null, rein: null }, argument: null, audio: false, team: null, late: false,
+      quotes: [], tells: [], caught: [], quiet: false, roles: null, mira: null
     };
   }
 
@@ -164,7 +213,15 @@
     state.audio = raw.audio === true;
     if (state.audio) remember(state.documents, 'dalAudio');
     state.late = state.docked && raw.late === true;
+    state.quotes = validArray(raw.quotes, quoteIds);
+    state.tells = validArray(raw.tells, crewIds);
+    state.caught = validArray(raw.caught, crewIds).filter(id => state.quotes.includes(id + ':lie'));
+    state.caught.forEach(id => remember(state.documents, truthDocs[id]));
+    state.quiet = raw.quiet === true;
     state.team = state.docked && Array.isArray(raw.team) && raw.team.length === 2 && new Set(raw.team).size === 2 && raw.team.every(id => crewIds.includes(id)) ? [...raw.team] : null;
+    state.roles = state.team && raw.roles && state.team.includes(raw.roles.good) && state.team.includes(raw.roles.bad) && raw.roles.good !== raw.roles.bad
+      ? { good: raw.roles.good, bad: raw.roles.bad } : null;
+    state.mira = state.roles && miraOutcomes.includes(raw.mira) ? raw.mira : null;
     if (state.versions) remember(state.documents, 'versions');
     if (state.accepted) briefingDocuments.forEach(id => remember(state.documents, id));
     if (state.lab) remember(state.documents, 'lab');
@@ -172,7 +229,7 @@
       state.crew = raw.crew;
       state.topic = int(raw.topic) ? raw.topic : null;
       state.pose = poses.includes(raw.pose) ? raw.pose : 'neutral';
-      if (raw.said && [...showable, 'secret'].includes(raw.said.doc) && ['high', 'low'].includes(raw.said.tone)) state.said = { doc: raw.said.doc, tone: raw.said.tone };
+      if (raw.said && [...showable, 'secret', 'pause', 'truth'].includes(raw.said.doc) && ['high', 'low'].includes(raw.said.tone)) state.said = { doc: raw.said.doc, tone: raw.said.tone };
     }
     return state;
   }
@@ -185,7 +242,7 @@
       return { state, ok: true, message: [message, update].filter(Boolean).join(' ') };
     };
 
-    if (state.docked && action !== 'team') return fail('Шаттл уже пристыкован.');
+    if (state.docked && !['team', 'roles', 'interrogate'].includes(action)) return fail('Шаттл уже пристыкован.');
     if (action === 'next-intro') {
       if (state.intro === 4) return fail('Вводная завершена.');
       state.intro += 1;
@@ -222,7 +279,9 @@
         state.pose = 'neutral';
         return success();
       case 'topic':
-      case 'pulse': {
+      case 'pulse':
+      case 'eyes':
+      case 'voice': {
         const index = Number(value);
         const topic = topicList(state, state.crew)[index];
         if (!Number.isInteger(index) || !topic?.open) return fail('Реплика недоступна.');
@@ -234,6 +293,73 @@
           if (hit && !state.pulse[state.crew]) state.pulse[state.crew] = 'seen';
           return success(hit ? 'Пульс сорвался на этом вопросе. Собеседник что-то недоговаривает.' : 'Пульс ровный.');
         }
+        if (action === 'eyes') {
+          const hit = index === pauseTopics[state.crew];
+          if (hit) remember(state.tells, state.crew);
+          return success(hit ? 'Жест выдал неловкость. Попробуйте выдержать паузу.' : '');
+        }
+        if (action === 'voice') {
+          if (noisy(state)) return success('Шум глушит голос. Здесь его не прочитать.');
+          const hit = index === voiceTopics[state.crew];
+          if (hit) remember(state.quotes, state.crew + ':lie');
+          return success(hit ? 'Голос дрогнул. Фраза записана в блокнот цитат.' : '');
+        }
+        return success();
+      }
+      case 'quiet':
+        if (!noisyRooms.includes(state.room)) return fail('Здесь и так тихо.');
+        if (state.quiet) return fail('Вентиляция уже приглушена.');
+        state.quiet = true;
+        return success('Рейн перевёл вентиляцию шлюза на малый ход. Стало тихо.', true);
+      case 'pause': {
+        const crewId = state.crew;
+        if (!crewId || state.topic == null) return fail('Сначала задайте вопрос.');
+        const seconds = Number(value);
+        if (!Number.isFinite(seconds) || seconds < 0) return fail('Пауза не удалась.');
+        if (seconds < pauseBreak[crewId]) return success('Вы заговорили первым.');
+        const hit = state.topic === pauseTopics[crewId];
+        state.said = { doc: 'pause', tone: hit ? 'high' : 'low' };
+        state.topic = null;
+        if (hit) {
+          const fresh = !state.quotes.includes(crewId + ':slip');
+          remember(state.quotes, crewId + ':slip');
+          return success(fresh ? 'Оговорка записана в блокнот цитат.' : '');
+        }
+        return success();
+      }
+      case 'confront': {
+        const crewId = state.crew;
+        if (!crewId) return fail('Сначала начните разговор.');
+        if (state.caught.includes(crewId)) return fail('Он уже рассказал правду.');
+        if (!quoteIds.includes(value) || !state.quotes.includes(value)) return fail('Такой цитаты нет в блокноте.');
+        const [owner, kind] = value.split(':');
+        if (owner === crewId) return fail('Нельзя опровергать человека его же словами.');
+        state.topic = null;
+        if (kind === 'slip' && slipTargets[owner] === crewId) {
+          if (!state.quotes.includes(crewId + ':lie')) return fail('Пока нечего опровергать. Сначала поймайте его на слове.');
+          remember(state.caught, crewId);
+          remember(state.documents, truthDocs[crewId]);
+          bond(state, crewId, 'trust', 1, 'truth');
+          state.said = { doc: 'truth', tone: 'high' };
+          return success('Правда записана в журнал.');
+        }
+        bond(state, crewId, 'trust', -1, 'quote');
+        state.said = { doc: 'truth', tone: 'low' };
+        return success('Цитата ничего не опровергает.');
+      }
+      case 'roles': {
+        if (!state.team) return fail('Сначала соберите группу.');
+        if (state.roles) return fail('Роли уже распределены.');
+        if (!state.team.includes(value?.good) || !state.team.includes(value?.bad) || value.good === value.bad) return fail('Распределите роли между двумя членами группы.');
+        state.roles = { good: value.good, bad: value.bad };
+        return success();
+      }
+      case 'interrogate': {
+        if (!state.roles) return fail('Сначала распределите роли.');
+        if (state.mira) return fail('Допрос окончен.');
+        const result = interrogate(state, state.roles, Array.isArray(value) ? value : []);
+        if (result.invalid || !result.done) return fail('Допрос не закончен.');
+        state.mira = result.outcome;
         return success();
       }
       case 'press': {
@@ -425,5 +551,6 @@
     }
   }
 
-  window.PROLOGUE_ENGINE = { fresh, restore, dispatch, adjacent, period, dockReady, labChannels, manifestFields, deskFields, replies, safeCode, dialSize, rooms, showable, priorities, crewIds, methods, memoryOpen, methodLikes, topicList, pulseTriggers, secretDocs, audioFragments, slotDeadline };
+  window.PROLOGUE_ENGINE = { fresh, restore, dispatch, adjacent, period, dockReady, labChannels, manifestFields, deskFields, replies, safeCode, dialSize, rooms, showable, priorities, crewIds, methods, memoryOpen, methodLikes, topicList, pulseTriggers, secretDocs, audioFragments, slotDeadline,
+    voiceTopics, pauseTopics, pauseBreak, slipTargets, truthDocs, goodFit, badFit, interrogate, noisy, roleFit };
 })();

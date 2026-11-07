@@ -171,7 +171,63 @@ function completeTyping(){
   cancelAnimationFrame(t.raf);t.i=t.full.length;paintTyped();
   t.host?.classList.remove('typing');typedKeys.add(t.key);typing=null;
 }
-let pulseOn=false;
+let lens=null;
+let silence=null;
+let miraSteps=[];
+const waveSeed=Array.from({length:60},(_,i)=>Math.round(5+Math.abs(Math.sin(i*2.3)*Math.cos(i*.71))*16));
+function voicePath(tremble,noise){
+  return waveSeed.map((h,i)=>{const amp=noise?(4+(i*13%9)):tremble&&i>22&&i<44?h*1.25+(i%2?3:-1):h*.6;return '<rect x="'+(i*3.3)+'" y="'+(15-amp/2)+'" width="1.8" height="'+amp+'"'+(tremble&&i>22&&i<44?' class="hot"':'')+'/>';}).join('');
+}
+function lensStrip(){
+  if(!lens||!state.crew)return '';
+  const id=state.crew;
+  if(lens==='pulse'){
+    const spike=state.pulse[id]==='seen'&&state.topic===E.pulseTriggers[id];
+    return '<div class="pulse-strip'+(spike?' spike':'')+'"><svg viewBox="0 0 200 30" preserveAspectRatio="none" aria-hidden="true"><path d="'+ecgPath(spike)+'"/></svg><span>'+esc(state.topic==null?C.pulse.hint:spike?C.pulse.spike:C.pulse.calm)+'</span></div>';
+  }
+  if(lens==='eyes'){
+    const tell=state.topic===E.pauseTopics[id];
+    const g=C.eyes.gestures[id];
+    return '<div class="lens-strip eyes'+(tell?' hit':'')+'"><b aria-hidden="true">◉</b><span>'+esc(state.topic==null?C.eyes.hint:tell?g.tell:g.base)+'</span></div>';
+  }
+  const noise=E.noisy(state);
+  const tremble=!noise&&state.topic===E.voiceTopics[id];
+  const text=state.topic==null?(noise?C.voice.noise:C.voice.hint):noise?C.voice.noise:tremble?C.voice.tremble+' '+C.quotes.text[id+':lie']:C.voice.calm;
+  return '<div class="lens-strip voice'+(tremble?' hit':'')+(noise?' noisy':'')+'"><svg viewBox="0 0 200 30" preserveAspectRatio="none" aria-hidden="true">'+voicePath(tremble,noise)+'</svg><span>'+esc(text)+'</span></div>';
+}
+function silenceBlock(){
+  const id=state.crew;const max=8;
+  const mark=state.tells.includes(id)?'<u style="--at:'+(E.pauseBreak[id]/max*100)+'%" title="Сорвётся примерно здесь"></u>':'';
+  return '<div class="silence"><p class="silence-fidget" id="silence-fidget">'+esc(C.pause.prompt)+'</p><div class="silence-bar" aria-hidden="true"><i id="silence-fill"></i>'+mark+'</div>'+
+    '<button type="button" class="btn" data-act="silence-stop" data-value="">'+esc(C.pause.stop)+'</button></div>';
+}
+function startSilence(){
+  if(silence||!state.crew)return;
+  silence={start:performance.now(),crew:state.crew,raf:0,line:-1};
+  render();
+  silence.raf=requestAnimationFrame(tickSilence);
+}
+function stopSilence(){if(silence){cancelAnimationFrame(silence.raf);silence=null;}}
+function tickSilence(now){
+  if(!silence)return;
+  const t=(now-silence.start)/1000;const brk=E.pauseBreak[silence.crew];
+  const fill=document.getElementById('silence-fill');
+  if(fill)fill.style.width=Math.min(100,t/8*100)+'%';
+  const stage=t>brk*.75?1:t>brk*.4?0:-1;
+  if(stage!==silence.line){
+    silence.line=stage;
+    const el=document.getElementById('silence-fidget');
+    if(el&&stage>=0){el.textContent=C.pause.fidget[silence.crew][stage];el.classList.remove('pop');void el.offsetWidth;el.classList.add('pop');haptic(false,15);}
+  }
+  if(t>=brk){endSilence(brk);return;}
+  silence.raf=requestAnimationFrame(tickSilence);
+}
+function endSilence(seconds){
+  if(!silence)return;
+  stopSilence();
+  const result=run('pause',seconds);
+  if(result.ok&&state.said?.doc==='pause'&&state.said.tone==='high')sfx.open();
+}
 let argumentOffered=false;
 let teamPick=[];
 let miraPage=0;
@@ -200,10 +256,17 @@ function audioBody(){
     '<p class="audio-text" id="audio-text">'+esc(cur?garble(cur.text,cur.clarity):'…шипение…')+'</p>'+
     '<div class="audio-found">'+Object.keys(A.fragments).map(id=>'<span class="'+(audioFound.includes(id)?'on':'')+'">'+(audioFound.includes(id)?'«'+esc(A.fragments[id].text)+'»':'Фрагмент не найден')+'</span>').join('')+'</div></div>';
 }
+function quotesBody(){
+  const Q=C.quotes;
+  if(!state.quotes.length)return p(Q.intro)+p(Q.empty);
+  const who=id=>C.bonds.short[id.split(':')[0]];
+  return p(Q.intro)+'<div class="quote-list">'+state.quotes.map(id=>'<div class="quote-card '+id.split(':')[1]+'"><small>'+esc(who(id))+' · '+esc(Q[id.split(':')[1]])+'</small><q>'+esc(Q.text[id].replace(/[«»]/g,''))+'</q>'+
+    (state.crew&&!state.caught.includes(state.crew)&&id.split(':')[0]!==state.crew?btn('confront',id,'Предъявить: '+C.bonds.short[state.crew]):'')+'</div>').join('')+'</div>';
+}
 function objectiveDone(id){
   return ({accept:state.accepted,deduction:state.deduction,lab:state.lab,task:Boolean(state.task?.done),reader:state.reader,nav:state.nav,dock:state.docked&&!state.late,
     safe:state.safeOpen,audio:state.audio,versions:state.versions,argument:Boolean(state.argument),
-    secrets:E.crewIds.every(id=>state.pulse[id]==='revealed'),memory:state.heard.length>0})[id];
+    secrets:E.crewIds.every(id=>state.pulse[id]==='revealed'),truths:state.caught.length===4,memory:state.heard.length>0})[id];
 }
 function ecgPath(spike){
   let d='M0 15';const beat=spike?22:40;
@@ -212,7 +275,7 @@ function ecgPath(spike){
 }
 function objectivesCard(){
   const secrets=E.crewIds.filter(id=>state.pulse[id]==='revealed').length;
-  const row=([id,label])=>'<li class="'+(objectiveDone(id)?'done':'')+'"><b>'+(objectiveDone(id)?'✓':'○')+'</b>'+esc(label)+(id==='secrets'?' ('+secrets+'/4)':'')+'</li>';
+  const row=([id,label])=>'<li class="'+(objectiveDone(id)?'done':'')+'"><b>'+(objectiveDone(id)?'✓':'○')+'</b>'+esc(label)+(id==='secrets'?' ('+secrets+'/4)':id==='truths'?' ('+state.caught.length+'/4)':'')+'</li>';
   return '<article class="card objectives"><h3>Цели</h3><ul>'+C.objectives.main.map(row).join('')+'</ul><h3>Необязательно</h3><ul class="side">'+C.objectives.side.map(row).join('')+'</ul></article>';
 }
 function currentObjective(){return C.objectives.main.find(([id])=>!objectiveDone(id))?.[1]??'';}
@@ -239,9 +302,11 @@ function renderEnding(){
     endingFrame('team','dock','Стыковка завершена',C.team.title,text,cards,btn('team-go','','Идём · '+teamPick.length+'/2',{primary:true,disabled:teamPick.length!==2}));
     return;
   }
-  const pages=[...C.mira.lines.slice(0,1),
+  const pre=[...C.mira.lines.slice(0,1),
     state.team.map(id=>C.bonds.short[id]+' '+C.team.picked[crewMood(id)]).join(' ')+' '+E.crewIds.filter(id=>!state.team.includes(id)).map(id=>C.bonds.short[id]+' '+C.team.stays[crewMood(id)]).join(' '),
-    ...C.mira.lines.slice(1),state.team.map(id=>C.mira.byTeam[id]).join(' '),C.mira.hook];
+    ...C.mira.lines.slice(1),state.team.map(id=>C.mira.byTeam[id]).join(' ')];
+  const pages=[...pre,...(state.mira?[C.interro.outcome[state.mira],C.mira.hook]:[])];
+  if(miraPage>=pre.length&&!state.mira){renderInterrogation();return;}
   if(miraPage<pages.length){
     endingFrame('mira-'+miraPage,'intro-0','Пролог · финал',C.mira.title,pages[miraPage],'<div class="progress-dots" aria-hidden="true">'+pages.map((_,i)=>'<i class="'+(i<=miraPage?'on':'')+'"></i>').join('')+'</div>',
       btn('mira-next','',miraPage===pages.length-1?'К итогам ▸':'Дальше ▸',{primary:true}));
@@ -253,10 +318,28 @@ function renderEnding(){
   const best=E.replies.reduce((a,b)=>state.path[b]>state.path[a]?b:a);
   const body='<div class="results">'+
     '<div class="res-block"><h3>Путь командира</h3><div class="res-path">'+E.replies.map(id=>'<span class="'+(id===best?'on':'')+'">'+esc(C.pathNames[id])+' <b>'+state.path[id]+'</b></span>').join('')+'</div></div>'+
-    '<div class="res-block"><h3>Экипаж</h3><ul class="crew-summary">'+E.crewIds.map(id=>'<li><strong>'+esc(C.bonds.short[id])+'</strong> '+esc(C.bonds.ending[crewMood(id)])+(state.pulse[id]==='revealed'?' <em>Секрет доверен.</em>':'')+'</li>').join('')+'</ul></div>'+
+    '<div class="res-block"><h3>Экипаж</h3><ul class="crew-summary">'+E.crewIds.map(id=>'<li><strong>'+esc(C.bonds.short[id])+'</strong> '+esc(C.bonds.ending[crewMood(id)])+(state.pulse[id]==='revealed'?' <em>Секрет доверен.</em>':'')+(state.caught.includes(id)?' <em>Правда сказана.</em>':'')+'</li>').join('')+'</ul></div>'+
     '<div class="res-block"><h3>Улики · '+found.length+' из '+R.evidence.length+'</h3><p class="res-small">'+esc(found.map(id=>C.documents[id].title).join(' · '))+'</p>'+(missed.length?'<p class="res-small missed">Упущено: '+esc(missed.map(id=>C.documents[id].title).join(' · '))+'</p>':'')+'</div>'+
-    '<div class="res-block"><h3>Подход</h3><p class="res-small">'+esc(state.late?R.late:R.onTime)+' '+esc(R[state.dockStyle]||'')+(state.argument?' Спор: '+esc(C.argument.options[state.argument].label)+'.':'')+'</p></div></div>';
+    '<div class="res-block"><h3>Подход</h3><p class="res-small">'+esc(state.late?R.late:R.onTime)+' '+esc(R[state.dockStyle]||'')+(state.argument?' Спор: '+esc(C.argument.options[state.argument].label)+'.':'')+(state.mira?' '+esc(C.interro.result[state.mira]):'')+'</p></div></div>';
   endingFrame('results','dock','Конец пролога',R.title,'',body,btn('restart','','Начать пролог заново',{primary:true})+btn('title-menu','','Главное меню'));
+}
+function renderInterrogation(){
+  const I=C.interro;const [a,b]=state.team;const name=id=>C.bonds.short[id];
+  if(!state.roles){
+    const opt=(good,bad)=>'<button type="button" class="role-card" data-act="role-set" data-value="'+good+'|'+bad+'">'+
+      '<span><b class="good">'+esc(name(good))+'</b> '+esc(I.good)+' <small>'+esc(I.fit[good].good)+'</small></span>'+
+      '<span><b class="bad">'+esc(name(bad))+'</b> '+esc(I.bad)+' <small>'+esc(I.fit[bad].bad)+'</small></span></button>';
+    endingFrame('roles','intro-0','Лунный арбитраж',I.title,I.rolesPrompt,'<div class="role-grid">'+opt(a,b)+opt(b,a)+'</div>','');
+    return;
+  }
+  const r=E.interrogate(state,state.roles,miraSteps);
+  const last=r.steps.at(-1);
+  const text=last?(last.who?I.act[last.who][last.move]:I.self)+' '+I.reaction[last.result]:I.prompt;
+  const gauge=(label,value,max,cls)=>'<div class="gauge '+cls+'"><span>'+esc(label)+'</span><span class="gauge-pips">'+Array.from({length:max},(_,i)=>'<i class="'+(i<value?'on':'')+'"></i>').join('')+'</span></div>';
+  const extra='<div class="interro">'+gauge(I.fear,r.fear,5,'fear'+(r.fear>=4?' hot':''))+gauge(I.open,r.open,3,'open')+
+    '<small class="interro-step">Ход '+(r.steps.length+1)+' из 4</small></div>';
+  const moves=btn('mira-move','good',I.moves.good+' · '+name(state.roles.good))+btn('mira-move','bad',I.moves.bad+' · '+name(state.roles.bad))+btn('mira-move','self',I.moves.self);
+  endingFrame('interro-'+r.steps.length,'intro-0','Лунный арбитраж · допрос',I.title,text,extra,moves);
 }
 function renderTitle(){
   const canContinue=state.intro>0;
@@ -351,7 +434,9 @@ function render() {
     return list;
   },[]) ?? [];
   const hasMore=speechPage<pages.length-1;
-  const line=crew?((memoryOn&&C.bonds.memories[state.crew]) || (state.said?.doc==='secret'&&C.secrets[state.crew][state.said.tone==='high'?'confess':'refuse']) || (state.said&&C.show[state.said.doc]?.[state.crew]?.[state.said.tone]) || (pages[speechPage] ?? (state.reply&&C.reactions[state.crew]?.[state.reply]) ?? crew.greeting ?? 'Командир. Слушаю вас.')):'';
+  const line=crew?((memoryOn&&C.bonds.memories[state.crew]) ||
+    (state.said?.doc==='pause'&&C.pause[state.said.tone==='high'?'slips':'idle'][state.crew]) ||
+    (state.said?.doc==='truth'&&C.quotes[state.said.tone==='high'?'truth':'wrong'][state.crew]) || (state.said?.doc==='secret'&&C.secrets[state.crew][state.said.tone==='high'?'confess':'refuse']) || (state.said&&C.show[state.said.doc]?.[state.crew]?.[state.said.tone]) || (pages[speechPage] ?? (state.reply&&C.reactions[state.crew]?.[state.reply]) ?? crew.greeting ?? 'Командир. Слушаю вас.')):'';
   const talkEnter=crew&&state.crew!==lastCrew&&!reduceMotion?' enter':'';
   const cam=reduceMotion?'':talkEnter?' cam-in':!crew&&lastCrew?' cam-out':'';
   lastCrew=state.crew;
@@ -361,17 +446,20 @@ function render() {
     ...E.showable.filter(doc=>state.documents.includes(doc)&&!state.shown[state.crew].includes(doc)).map(doc=>btn('show',doc,C.show[doc].label)),
     E.memoryOpen(state,state.crew)?btn('memory','',C.bonds.memoryLabel,{disabled:memoryOn}):'',
     ['seen','closed'].includes(state.pulse[state.crew])?'<button type="button" class="btn press" data-act="press" data-value="">'+esc(C.pulse.press)+'</button>':'',
-    (state.crew==='mara'||state.crew==='rein')&&state.nav&&state.reader&&!state.argument?btn('panel','argument','Решить спор о подходе'):''
+    (state.crew==='mara'||state.crew==='rein')&&state.nav&&state.reader&&!state.argument?btn('panel','argument','Решить спор о подходе'):'',
+    state.topic!=null?'<button type="button" class="btn pause-btn" data-act="silence" data-value="">… '+esc(C.pause.label)+'</button>':'',
+    state.quotes.length&&!state.caught.includes(state.crew)?'<button type="button" class="btn quote-btn" data-act="panel" data-value="quotes">❝ '+esc(C.quotes.label)+'</button>':'',
+    lens==='voice'&&E.noisy(state)?btn('quiet','',C.voice.quiet):''
   ].join(''):'';
-  const spike=crew&&state.pulse[state.crew]==='seen'&&state.topic===E.pulseTriggers[state.crew];
-  const pulseStrip=crew&&pulseOn?'<div class="pulse-strip'+(spike?' spike':'')+'"><svg viewBox="0 0 200 30" preserveAspectRatio="none" aria-hidden="true"><path d="'+ecgPath(spike)+'"/></svg><span>'+esc(state.topic==null?C.pulse.hint:spike?C.pulse.spike:C.pulse.calm)+'</span></div>':'';
+  const pulseStrip=crew?lensStrip():'';
+  const lensBtns=crew?'<div class="lens-row" role="group" aria-label="Чтение людей">'+Object.entries(C.lenses).map(([id,l])=>'<button type="button" class="btn lens lens-'+id+(lens===id?' on':'')+'" data-act="lens" data-value="'+id+'" aria-pressed="'+(lens===id)+'"><b aria-hidden="true">'+l.icon+'</b> '+esc(l.label)+'</button>').join('')+'</div>':'';
   const conversation=crew?'<section class="conversation typing-host'+talkEnter+'" aria-label="Разговор">'+
     '<div class="nameplate"><strong class="speaker-name">'+esc(crew.name)+'</strong><span class="speaker-role">'+esc(crew.role)+'</span><span class="mood mood-'+(state.trust[state.crew]>0?'up':state.trust[state.crew]<0?'down':'flat')+'">'+esc(C.bonds.levels.trust[String(state.trust[state.crew])])+'</span>'+
       '<button type="button" class="icon-btn talk-close" data-act="end-talk" aria-label="Завершить разговор">'+ico('close')+'</button></div>'+
     pulseStrip+tw(line,'c:'+state.crew+':'+line,state.crew)+
-    '<div class="after-type"><div class="reply">'+(hasMore?'<button type="button" class="btn primary next" data-act="speech-next">Дальше ▸</button>':
-      topicsAll.filter(entry=>entry.open).map((entry,n)=>'<button type="button" class="choice'+(askedTopics.has(state.crew+':'+entry.index)?' asked':'')+(entry.when&&!askedTopics.has(state.crew+':'+entry.index)?' fresh':'')+'" data-act="'+(pulseOn?'pulse':'topic')+'" data-value="'+entry.index+'" style="--i:'+n+'"><b>'+(n+1)+'</b><span>'+esc(entry.question)+'</span>'+(entry.when&&!askedTopics.has(state.crew+':'+entry.index)?'<em>новое</em>':'')+'</button>').join(''))+'</div>'+
-    '<div class="conversation-tools"><button type="button" class="btn pulse-toggle'+(pulseOn?' on':'')+'" data-act="pulse-mode" data-value="" aria-pressed="'+pulseOn+'">♥ '+esc(C.pulse.label)+'</button>'+tools+btn('panel','crew-bio','Отношения')+'</div></div></section>':'';
+    '<div class="after-type"><div class="reply">'+(silence?silenceBlock():hasMore?'<button type="button" class="btn primary next" data-act="speech-next">Дальше ▸</button>':
+      topicsAll.filter(entry=>entry.open).map((entry,n)=>'<button type="button" class="choice'+(askedTopics.has(state.crew+':'+entry.index)?' asked':'')+(entry.when&&!askedTopics.has(state.crew+':'+entry.index)?' fresh':'')+'" data-act="'+(lens||'topic')+'" data-value="'+entry.index+'" style="--i:'+n+'"><b>'+(n+1)+'</b><span>'+esc(entry.question)+'</span>'+(entry.when&&!askedTopics.has(state.crew+':'+entry.index)?'<em>новое</em>':'')+'</button>').join(''))+'</div>'+
+    (silence?'':lensBtns+'<div class="conversation-tools">'+tools+btn('panel','crew-bio','Отношения')+'</div>')+'</div></section>':'';
   const goal=!crew&&currentObjective()?'<div class="goal"><span>Цель</span>'+esc(currentObjective())+'</div>':'';
   const thought=!crew&&thoughtOpen?'<div class="thought typing-host'+(reduceMotion?'':' enter')+'"><div class="kicker">Внутренний голос</div>'+tw(room.thought,'t:'+state.room,'thought')+'<div class="after-type">'+btn('dismiss-thought','','Продолжить')+'</div></div>':'';
   const sceneArt=crewId ? 'scene-'+state.room : 'room-'+state.room;
@@ -408,11 +496,12 @@ function run(act,input,value){
     state=result.state;
     if(act==='move'){thoughtOpen=firstVisit;roomCard=firstVisit&&!reduceMotion;closePanel();}
     if(act==='next-intro'&&state.intro===C.intro.length)thoughtOpen=true;
-    if(act==='topic'||act==='talk'||act==='end-talk')speechPage=0;
+    if(['topic','pulse','eyes','voice','talk','end-talk'].includes(act))speechPage=0;
     if(act==='dock')closePanel();
     if(act==='read')documentId=value;
     if(act==='deduce'){links=[];pendingLink=null;}
-    if(act==='end-talk')pulseOn=false;
+    if(act==='end-talk'||act==='move')lens=null;
+    if(act!=='pause')stopSilence();
     persist();
     render();
     if(activePanel)paintPanel();
@@ -438,6 +527,7 @@ function crewCard(id,full){
     meter('trust',state.trust[id])+meter('close',state.close[id])+meter('methods',E.methods(state,id))+
     '<p class="crew-perk'+(perkOn?' on':'')+'">'+(perkOn?'◆ ':'◇ ')+esc(perkOn?perk.on:perk.off)+'</p>'+
     '<small class="crew-likes">Ценит путь: '+esc(C.pathNames[like])+'</small>'+
+    (state.tells.includes(id)?'<p class="crew-manner"><b>'+esc(C.eyes.learned)+':</b> '+esc(C.eyes.manner[id])+'</p>':'')+
     (full?p(crew.bio)+'<small>'+esc(E.memoryOpen(state,id)?(state.heard.includes(id)?'Он рассказал вам о Дале.':'Готов поговорить о Дале.'):C.bonds.memoryLocked)+'</small>':'')+
     (log.length?'<ul class="crew-log">'+log.map(entry=>'<li class="'+(entry.delta>0?'up':'down')+'">'+esc(C.bonds.axes[entry.axis])+' '+(entry.delta>0?'+':'−')+Math.abs(entry.delta)+' · '+esc(C.bonds.why[entry.why])+'</li>').join('')+'</ul>':'')+
     '</article>';
@@ -962,6 +1052,10 @@ function paintPanel() {
         }).join('')+'</div>'+p(C.rooms[state.room].description);
       break;
     }
+    case 'quotes':
+      title=C.quotes.title;
+      body=quotesBody();
+      break;
     case 'crew-bio': {
       const crew=C.crew[state.crew];
       title=crew?.name ?? 'Досье экипажа';
@@ -978,6 +1072,7 @@ function paintPanel() {
       title='Оперативник Багряных домов';
       body=card('Свидетель пульса',p('Зрелый кровный. Опытный сотрудник клинической контрразведки. Здоров.')+
         p('Хищное восприятие позволяет замечать физиологические реакции. Их причину устанавливают наблюдением и проверкой.'))+
+        card(C.readHero.title,C.readHero.lines.map(p).join(''))+
         card('Путь командира',E.replies.map(id=>p(C.pathNames[id]+': '+state.path[id])).join('')+'<small>Очки пути дают выборы в ключевых решениях.</small>')+
         '<div class="grid">'+['Воля','Устрашение','Проницательность','Убеждение','Аналитика','Физическая мощь'].map((label,index)=>card(label,p(['Высокая','Высокое','Высокая','Уверенное','Высокая','Высокая'][index]))).join('')+'</div>';
       break;
@@ -986,6 +1081,7 @@ function paintPanel() {
       title=activePanel==='diary'?'Личный дневник':'Журнал задания';
       body=activePanel==='diary'?C.diary.map(item=>card(item.title,p(item.text))).join(''):
         objectivesCard()+
+        (state.quotes.length?'<div class="actions">'+btn('panel','quotes',C.quotes.title+' · '+state.quotes.length)+'</div>':'')+
         '<div class="actions">'+state.documents.map(id=>btn('read',id,C.documents[id].title)).join('')+'</div>'+
         (C.documents[documentId]?card(C.documents[documentId].title,'<p class="sheet">'+esc(C.documents[documentId].text)+'</p>'):'')+
         (state.thoughts.length?card('Мысли командира',state.thoughts.map(entry=>C.rooms[entry]?.thought ?? thoughts[entry]).filter(Boolean).map(p).join('')):'');
@@ -1044,13 +1140,24 @@ document.addEventListener('click',event=>{
   if(act==='set-sound'){settings.sound=value==='1';saveSettings();if(settings.sound){sfx.wake();sfx.click(true);}sfx.ambient(ambientWanted);paintPanel();return;}
   if(act==='set-vibro'){settings.vibro=value==='1';saveSettings();haptic(true,40);paintPanel();return;}
   if(act==='set-speed'){settings.speed=value;saveSettings();paintPanel();return;}
-  if((act==='topic'||act==='pulse')&&state.crew)askedTopics.add(state.crew+':'+value);
-  if(act==='pulse-mode'){pulseOn=!pulseOn;sfx.thump?.();render();return;}
+  if(['topic','pulse','eyes','voice'].includes(act)&&state.crew)askedTopics.add(state.crew+':'+value);
+  if(act==='lens'){lens=lens===value?null:value;haptic(false,12);render();return;}
+  if(act==='silence'){startSilence();return;}
+  if(act==='silence-stop'){if(silence)endSilence((performance.now()-silence.start)/1000);return;}
+  if(act==='confront'){closePanel();const r=run('confront',value);if(r.ok&&state.said?.tone==='high'){sfx.open();haptic(true,[40,60,40]);}else if(r.ok){sfx.fail();shake();}return;}
+  if(act==='role-set'){const [good,bad]=value.split('|');run('roles',{good,bad});return;}
+  if(act==='mira-move'){
+    miraSteps.push(value);
+    const r=E.interrogate(state,state.roles,miraSteps);
+    if(r.steps.at(-1)?.result==='badPanic'){sfx.fail();shake();}
+    if(r.done)run('interrogate',miraSteps.slice());else render();
+    return;
+  }
   if(act==='press'||act==='argue')sfx.wake();
   if(act==='team-pick'){teamPick=teamPick.includes(value)?teamPick.filter(id=>id!==value):[...teamPick,value].slice(-2);render();return;}
   if(act==='team-go'){if(run('team',teamPick.slice()).ok){miraPage=0;}return;}
   if(act==='mira-next'){miraPage++;render();return;}
-  if(act==='topic'||act==='pulse'){const n=Number(value);run(act,n,value);return;}
+  if(['topic','pulse','eyes','voice'].includes(act)){const n=Number(value);run(act,n,value);return;}
   if(act==='panel'){
     if(value==='desk'){pendingLink=null;pickFrom=null;}
     if(value==='safe'){dialEntered=[];}
@@ -1103,7 +1210,7 @@ document.addEventListener('click',event=>{
   if(act==='save'){notify(persist(manualKey)?'Ручное сохранение записано.':'Сохранение недоступно.');return;}
   if(act==='restart'){openPanel('confirm-new');return;}
   if(act==='restart-yes'){
-    state=E.fresh();titleOpen=false;typedKeys.clear();askedTopics.clear();seenBonds=0;lastCrew=null;pulseOn=false;argumentOffered=false;teamPick=[];miraPage=0;audioFound=[];audioPos=0;audioFreq=50;
+    state=E.fresh();titleOpen=false;typedKeys.clear();askedTopics.clear();seenBonds=0;lastCrew=null;lens=null;stopSilence();miraSteps=[];argumentOffered=false;teamPick=[];miraPage=0;audioFound=[];audioPos=0;audioFreq=50;
     speechPage=0;thoughtOpen=false;links=[];pendingLink=null;pickFrom=null;dialEntered=[];dialRot=0;documentId='';labResult='';versionResult='';memoryOn=false;
     closePanel();persist();render();
     return;
