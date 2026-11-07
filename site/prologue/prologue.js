@@ -186,6 +186,7 @@ dialog.addEventListener('pointerdown',event=>{
   if(dial){
     const r=dial.getBoundingClientRect();
     const cx=r.left+r.width/2,cy=r.top+r.height/2;
+    sfx.wake();
     dialDrag={cx,cy,start:Math.atan2(event.clientY-cy,event.clientX-cx),rot:dialRot};
     dial.setPointerCapture?.(event.pointerId);
     event.preventDefault();
@@ -225,6 +226,66 @@ dialog.addEventListener('pointerup',endPointer);
 dialog.addEventListener('pointercancel',()=>{deskDrag=null;dialDrag=null;drawLines();});
 window.addEventListener('resize',()=>{if(activePanel==='desk')drawLines();});
 /* Ящик Даля: кодовый диск */
+/* Звук и вибрация замка */
+const sfx=(()=>{
+  let ctx=null;
+  const wake=()=>{try{ctx=ctx||new (window.AudioContext||window.webkitAudioContext)();if(ctx.state==='suspended')ctx.resume();}catch{ctx=null;}};
+  const noise=(at,len,freq,q,vol,curve)=>{
+    const buf=ctx.createBuffer(1,Math.max(1,Math.floor(ctx.sampleRate*len)),ctx.sampleRate);const d=buf.getChannelData(0);
+    for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,curve);
+    const src=ctx.createBufferSource();src.buffer=buf;
+    const f=ctx.createBiquadFilter();f.type='bandpass';f.frequency.value=freq;f.Q.value=q;
+    const g=ctx.createGain();g.gain.value=vol;
+    src.connect(f).connect(g).connect(ctx.destination);src.start(at);
+  };
+  const thump=(at,freq,len,vol)=>{
+    const o=ctx.createOscillator();o.type='sine';o.frequency.setValueAtTime(freq,at);o.frequency.exponentialRampToValueAtTime(freq*.55,at+len);
+    const g=ctx.createGain();g.gain.setValueAtTime(vol,at);g.gain.exponentialRampToValueAtTime(.001,at+len);
+    o.connect(g).connect(ctx.destination);o.start(at);o.stop(at+len+.02);
+  };
+  return {
+    wake,
+    click(strong){
+      if(!ctx)return;const t=ctx.currentTime;
+      if(strong){noise(t,.05,1100,1.4,1.1,3);thump(t,140,.09,.55);}
+      else noise(t,.018,3200,2.5,.45,6);
+    },
+    open(){
+      wake();if(!ctx)return;const t=ctx.currentTime;
+      [0,.11,.22].forEach(d=>{noise(t+d,.05,900,1.2,1,3);thump(t+d,120,.1,.5);});
+      noise(t+.38,.35,500,.8,.5,1.5);thump(t+.38,70,.3,.6);
+    },
+    fail(){
+      wake();if(!ctx)return;const t=ctx.currentTime;
+      noise(t,.12,600,1,.8,2);thump(t,90,.22,.6);noise(t+.14,.25,1800,3,.25,2);
+    }
+  };
+})();
+/* Вибрация: Android через navigator.vibrate, iPhone через системный переключатель (iOS 18+) */
+const iosSwitch=(()=>{
+  try{
+    const id='haptic-switch';
+    const input=document.createElement('input');input.type='checkbox';input.setAttribute('switch','');input.id=id;input.tabIndex=-1;input.setAttribute('aria-hidden','true');
+    const label=document.createElement('label');label.htmlFor=id;label.setAttribute('aria-hidden','true');
+    for(const el of [input,label])Object.assign(el.style,{position:'fixed',left:'-100px',top:'0',width:'1px',height:'1px',opacity:'0',pointerEvents:'none'});
+    document.body.append(input,label);
+    return label;
+  }catch{return null;}
+})();
+let lastTap=0;
+function haptic(strong,pattern){
+  try{
+    if(typeof navigator.vibrate==='function'){navigator.vibrate(pattern??(strong?60:12));return;}
+  }catch{}
+  if(!iosSwitch)return;
+  const now=Date.now();
+  if(!strong&&now-lastTap<70)return;
+  lastTap=now;
+  {
+    const times=Array.isArray(pattern)?Math.ceil(pattern.length/2):1;
+    for(let i=0;i<times;i++)setTimeout(()=>iosSwitch.click(),i*110);
+  }
+}
 function dialNum(){const step=360/E.dialSize;return ((Math.round(-dialRot/step)%E.dialSize)+E.dialSize)%E.dialSize;}
 function turnDial(rot){
   dialRot=rot;
@@ -237,10 +298,10 @@ function turnDial(rot){
     lastDialNum=n;
     const marker=document.getElementById('dial-marker');
     if(n===E.safeCode[dialEntered.length]){
-      try{navigator.vibrate?.(35);}catch{}
+      sfx.click(true);haptic(true);
       if(marker){marker.classList.remove('hit');void marker.getBBox();marker.classList.add('hit');}
     } else {
-      try{navigator.vibrate?.(4);}catch{}
+      sfx.click(false);haptic(false);
     }
   }
 }
@@ -405,12 +466,14 @@ document.addEventListener('click',event=>{
   if(act==='link-cancel'){pendingLink=null;pickFrom=null;paintPanel();return;}
   if(act==='link-remove'){links.splice(Number(value),1);paintPanel();return;}
   if(act==='link-check'){run('deduce',{links:links.map(({a,b,kind})=>({a,b,kind}))});return;}
+  if(act==='dial-step'||act==='dial-fix')sfx.wake();
   if(act==='dial-step'){turnDial(dialRot-Number(value)*360/E.dialSize);return;}
   if(act==='dial-fix'){
     dialEntered.push(dialNum());
     if(dialEntered.length<3){paintPanel();return;}
     const code=dialEntered.slice();dialEntered=[];
-    if(!run('unlock',code).ok)paintPanel();
+    const opened=run('unlock',code).ok;
+    if(opened){sfx.open();haptic(true,[40,60,40,60,90]);}else{sfx.fail();haptic(true,[120,60,120]);paintPanel();}
     return;
   }
   if(act==='dial-reset'){dialEntered=[];paintPanel();return;}
