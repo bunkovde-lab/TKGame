@@ -162,7 +162,7 @@
       case 'calibrate':
         if (state.room !== 'lab' || !state.sampleReady) return fail('Установите кассету в лабораторный сканер.');
         if (state.lab) return fail('Калибровка уже записана.');
-        if (value !== 'baseline') return fail('Для калибровки сначала нужна эталонная линия.');
+        if (value !== 'baseline') return fail('Этот профиль не совпадает с эталоном. Сравните форму сигнала.');
         state.lab = true;
         remember(state.documents, 'lab');
         return success('Калибровка завершена. Результат записан в журнал.', true);

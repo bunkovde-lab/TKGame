@@ -5,8 +5,8 @@ const C = window.PROLOGUE_CONTENT;
 const app = document.querySelector('#app');
 const dialog = document.querySelector('#panel');
 const status = document.querySelector('#status');
-const autoKey = 'tkgame-prologue-auto-v1';
-const manualKey = 'tkgame-prologue-manual-v1';
+const autoKey = 'tkgame-prologue-auto-v2';
+const manualKey = 'tkgame-prologue-manual-v2';
 const esc = value => String(value ?? '').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const btn = (action,value,label,options={}) => '<button type="button" class="btn '+(options.primary?'primary':'')+'" data-act="'+esc(action)+'" data-value="'+esc(value)+'"'+(options.disabled?' disabled':'')+'>'+esc(label)+'</button>';
 const p = value => '<p>'+esc(value)+'</p>';
@@ -22,12 +22,13 @@ let documentId = '';
 let thoughtOpen = !state.visited.includes(state.room);
 let speechPage = 0;
 let compare = {same:'',different:''};
+let compareSide = '';
+let compareField = '';
 let toastTimer;
 const thoughts = {badge:'Мой допуск имеет силу здесь, на борту. В порту это прежде всего способ представиться.',sample:'Пустой сканер тоже может показать красивую картинку. Мне нужен известный образец, чтобы ей поверить.',order:'Центр назвал срок и объект проверки. Остальное мне придётся добыть на месте.',deduction:'Совпал рейс. Разошлась причина перевозки. Теперь нужно понять, кто мог менять запись.'};
 const fieldLabels = {voyage:'Идентификатор рейса',cargo:'Назначение груза',time:'Время выгрузки'};
-const channelLabels = {sample:'Канал кассеты',baseline:'Эталонный канал',noise:'Канал фонового шума'};
 const fixtures = {
-  office:[['terminal','Терминал Центра',31,43],['desk','Рабочий стол',52,59],['badge','Идентификатор',67,70],['diary','Личный дневник',22,66]],
+  office:[['terminal','Терминал Центра',54,43],['desk','Рабочий стол',39,63],['badge','Идентификатор',28,77],['diary','Личный дневник',11,59]],
   cockpit:[['map','Карта и маршрут',34,53],['docking','Панель стыковки',59,67]],
   lab:[['lab','Криминалистический сканер',36,52],['sample','Контрольная кассета',54,67]],
   analysis:[['analysis','Пост аналитика',35,52]],
@@ -53,16 +54,9 @@ function closePanel() {
   if (dialog.open) dialog.close();
   activePanel='';
 }
-function actor(crewId,speaking) {
+function actor(crewId) {
   const crew=C.crew[crewId];
-  const period=E.period(state.tick);
-  const offDuty=(period==='Ночь'||period==='Вечер') && !(
-    crewId==='mara'&&state.nav || crewId==='corvin'&&state.sampleReady || crewId==='irena'&&state.task&&!state.task.done || crewId==='rein'&&state.reader
-  );
-  const image='assets/crew-'+crewId+(offDuty?'-off':'')+(speaking&&state.pose!=='neutral'?'-talk':'')+'.webp';
-  const inner='<img src="'+image+'" alt=""><span>'+esc(crew.name)+'</span>';
-  return speaking?'<div class="actor speaking '+esc(state.pose)+'">'+inner+'</div>':
-    '<button class="actor" data-act="talk" data-value="'+crewId+'" aria-label="Поговорить: '+esc(crew.name)+'">'+inner+'</button>';
+  return '<button class="embedded-actor" data-act="talk" data-value="'+crewId+'" aria-label="Поговорить: '+esc(crew.name)+'"><span>'+esc(crew.name)+'</span></button>';
 }
 function render() {
   const period=E.period(state.tick);
@@ -73,7 +67,7 @@ function render() {
     app.innerHTML='<main class="game">'+head+'<section class="scene intro" style="--art:url(assets/'+(end?'dock':'intro-'+state.intro)+'.webp)"><div class="intro-copy"><div class="kicker">'+
       (end?'Конец пролога':'Пролог · '+(state.intro+1)+' / '+C.intro.length)+'</div><h1>'+esc(frame.title)+'</h1>'+p(frame.text)+'<div class="actions">'+
       (end?btn('panel','system','Сохранения')+'<a class="btn-link" href="../">К тестовой версии</a>':
-        btn('next-intro','',state.intro===C.intro.length-1?'Войти в кабинет':'Продолжить →',{primary:true}))+'</div></div></section></main>';
+        btn('next-intro','',state.intro===C.intro.length-1?'Вступить в командование':'Продолжить →',{primary:true}))+'</div></div></section></main>';
     return;
   }
   const room=C.rooms[state.room];
@@ -91,17 +85,18 @@ function render() {
     return list;
   },[]) ?? [];
   const hasMore=speechPage<pages.length-1;
-  const conversation=crew?'<section class="conversation" aria-label="Разговор"><div class="kicker">'+esc(crew.role)+'</div>'+
-    p(pages[speechPage] ?? 'Можно поговорить о задании или спросить, что привело собеседника на этот борт.')+
-    '<div class="actions">'+(hasMore?btn('speech-next','','Дальше →',{primary:true}):crew.topics.map((entry,index)=>btn('topic',index,entry.question)).join(''))+
+  const conversation=crew?'<section class="conversation" aria-label="Разговор"><div class="speaker"><strong class="speaker-name">'+esc(crew.name)+'</strong><span class="speaker-role">'+esc(crew.role)+'</span></div>'+
+    p(pages[speechPage] ?? crew.greeting ?? 'Командир. Слушаю вас.')+
+    '<div class="reply">'+(hasMore?btn('speech-next','','Дальше →',{primary:true}):crew.topics.map((entry,index)=>btn('topic',index,entry.question)).join(''))+'</div><div class="conversation-tools actions">'+
     (!hasMore&&state.crew==='irena'?btn('assign','','Поручить проверку ведомости',{disabled:!state.deduction||Boolean(state.task)}):'')+
     btn('panel','crew-bio','Досье')+btn('end-talk','','Завершить разговор')+'</div></section>':'';
   const thought=!crew&&thoughtOpen?'<div class="thought"><div class="kicker">Внутренний голос</div>'+p(room.thought)+btn('dismiss-thought','','Продолжить')+'</div>':'';
   const hud=[['hero','Герой'],['inventory','Инвентарь'],['journal','Журнал'],['map','Карта'],['ship','Шаттл'],['system','Меню']]
     .map(([id,label])=>btn('panel',id,label)).join('');
-  app.innerHTML='<main class="game">'+head+'<section class="scene" aria-label="'+esc(room.name)+'" style="--art:url(assets/room-'+state.room+'.webp)">'+
+  const sceneArt=crewId ? 'scene-'+state.room : 'room-'+state.room;
+  app.innerHTML='<main class="game">'+head+'<section class="scene '+(crew?'scene-speaking':'')+'" aria-label="'+esc(room.name)+'" style="--art:url(assets/'+sceneArt+'.webp)">'+
     '<header><div class="kicker">Шаттл · '+esc(period)+'</div><h1>'+esc(room.name)+'</h1></header>'+
-    (crew?actor(state.crew,true):hotspots+(crewId?actor(crewId,false):''))+
+    (crew?'':hotspots+(crewId?actor(crewId):''))+
     conversation+thought+(crew?'':'<nav class="exits" aria-label="Двери">'+exits+'</nav>')+
     '</section><nav class="hud" aria-label="Инструменты">'+hud+'</nav></main>';
 }
@@ -123,15 +118,28 @@ function paintPanel() {
       body=card(C.documents.order.title,p(C.documents.order.text))+
         (state.accepted?p('Приказ принят. Ведомости доступны на рабочем столе.'):btn('accept','','Принять приказ',{primary:true}));
       break;
-    case 'desk':
+    case 'desk': {
       title='Рабочий стол';
-      body=propArt('desk')+(state.accepted?'<div class="grid">'+['manifestPort','manifestInternal'].map(id=>
-        card(C.documents[id].title,'<p class="sheet">'+esc(C.documents[id].text)+'</p>'+btn('read',id,'Зафиксировать источник'))).join('')+'</div>'+
-        (state.deduction?card('Подтверждённый факт',p('Ведомости относятся к одному рейсу. Назначение груза в записях различается. Ирена может проверить происхождение записи.')):
-          '<div class="grid">'+['same','different'].map(id=>'<label>'+ (id==='same'?'Что совпадает?':'Какое расхождение важно для дела?')+'<select data-compare="'+id+'"><option value="">Выбрать поле</option>'+
-            E.manifestFields.map(field=>'<option value="'+field+'"'+(compare[id]===field?' selected':'')+'>'+esc(fieldLabels[field])+'</option>').join('')+'</select></label>').join('')+
-            '</div>'+btn('combine','','Проверить связь',{primary:true})):p('Сначала примите приказ Центра. Тогда обе версии ведомости появятся на столе.'));
+      if (!state.accepted) {
+        body=p('Примите приказ Центра, чтобы получить ведомости.');
+        break;
+      }
+      if (state.deduction) {
+        body=card('Связь подтверждена',p('Один рейс LN-407. Два назначения груза. Ирена может проверить происхождение записи.'));
+        break;
+      }
+      const phase=compare.same?'different':'same';
+      const fields={
+        manifestPort:{voyage:'LN-407',cargo:'Санитарная перевозка',time:'16:20'},
+        manifestInternal:{voyage:'LN-407',cargo:'Передача лиц под внешнюю юрисдикцию',time:'16:42'}
+      };
+      body='<p>'+ (phase==='same'?'Выделите в обеих ведомостях признак, который подтверждает, что речь об одном рейсе.':'Выделите в обеих ведомостях расхождение, которое меняет смысл перевозки.')+'</p>'+
+        '<div class="grid evidence-desk">'+Object.keys(fields).map(id=>card(C.documents[id].title,
+          Object.entries(fields[id]).map(([field,value])=>btn('field',id+'|'+field,fieldLabels[field]+' · '+value,{primary:compareSide===id&&compareField===field})).join('')
+        )).join('')+'</div>'+
+        (compare.same?'<small>✓ Совпадение установлено. Теперь проверьте расхождение.</small>':'');
       break;
+    }
     case 'inventory':
       title='Инвентарь';
       body=state.inventory.length?'<div class="grid">'+state.inventory.map(id=>card(C.items[id].name,shelf(id))).join('')+'</div>':p('Вещей пока нет. Идентификатор лежит в кабинете, контрольная кассета — в лаборатории.');
@@ -141,12 +149,21 @@ function paintPanel() {
       title=C.items[activePanel].name;
       body=shelf(activePanel);
       break;
-    case 'lab':
-      title='Лабораторный сканер';
-      body=propArt('lab')+(state.lab?card('Калибровка подтверждена',p(C.documents.lab.text)):p('Установите контрольную кассету. Эталонный канал должен дать опорный профиль, прежде чем сканер примет реальную улику.')+
-        (state.sampleReady?'<div class="actions">'+E.labChannels.map(ch=>btn('calibrate',ch,channelLabels[ch])).join('')+'</div>':
-        btn('use','sample','Установить кассету',{disabled:!state.inventory.includes('sample')})));
+    case 'lab': {
+      title='Криминалистический сканер';
+      const traces={sample:'M0 32L20 32 29 8 39 36 49 21 59 32 90 32 99 8 109 36 119 21 129 32 150 32',
+        baseline:'M0 32L20 32 29 11 38 32 55 32 64 11 73 32 90 32 99 11 108 32 125 32 134 11 143 32 150 32',
+        noise:'M0 32L12 29 19 35 28 27 38 34 50 30 60 37 71 29 80 34 95 25 105 33 120 30 130 35 145 31 150 32'};
+      const plot=path=>'<svg viewBox="0 0 150 45" aria-hidden="true"><path d="M0 32H150" stroke="#596d72" fill="none"/><path d="'+path+'" stroke="#a1e5d7" stroke-width="2" fill="none"/></svg>';
+      if (state.lab) body=card('Калибровка подтверждена',p(C.documents.lab.text));
+      else if (!state.sampleReady) body=propArt('lab')+p('Установите контрольную кассету, чтобы вывести сигнал.')+
+        btn('use','sample','Установить кассету',{disabled:!state.inventory.includes('sample')});
+      else body='<div class="card lab-reference"><strong>Образец на корпусе кассеты</strong>'+plot(traces.baseline)+
+        '<p>Найдите совпадающий профиль на одном из трёх каналов.</p></div><div class="lab-traces">'+
+        E.labChannels.map((ch,index)=>'<button class="trace-card" data-act="calibrate" data-value="'+ch+'">'+
+          '<span>Канал '+(index+1)+'</span>'+plot(traces[ch])+'</button>').join('')+'</div>';
       break;
+    }
     case 'analysis':
       title='Пост аналитика';
       body=state.task?.done?card(C.documents.analysis.title,p(C.documents.analysis.text)):
@@ -177,8 +194,8 @@ function paintPanel() {
       break;
     case 'ship': {
       title='План шаттла';
-      const positions = {cockpit:[50,15],lab:[22,50],office:[50,50],analysis:[78,50],airlock:[50,85]};
-      body='<div class="ship-plan" aria-label="Схема помещений"><svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><path d="M50 15V85 M22 50H78" stroke="#d0b37c" stroke-width=".65" stroke-dasharray="2 1" fill="none"/></svg>'+
+      const positions = {cockpit:[50,18],lab:[17,49],office:[50,47],analysis:[83,49],airlock:[51,78]};
+      body='<div class="ship-plan" aria-label="Иллюстрированный план шаттла">'+
         Object.keys(positions).map(id=>{
           const [x,y]=positions[id];
           const here=state.room===id;
@@ -216,15 +233,32 @@ function paintPanel() {
   }
   dialog.innerHTML='<header class="panel-head"><h2 id="panel-title">'+esc(title)+'</h2>'+btn('close','','Закрыть')+'</header><div id="panel-feedback" role="status"></div><div class="panel-body">'+body+'</div>';
 }
-document.addEventListener('change',event=>{
-  if(event.target.dataset.compare) compare[event.target.dataset.compare]=event.target.value;
-});
 dialog.addEventListener('close',()=>{activePanel='';});
 document.addEventListener('click',event=>{
   const control=event.target.closest('[data-act]');
   if(!control) return;
-  const {act,value}=control.dataset;
-  if(act==='panel'){openPanel(value);return;}
+  let {act,value}=control.dataset;
+  if(act==='panel'){
+    if(value==='desk'){compare={same:'',different:''};compareSide='';compareField='';}
+    openPanel(value);return;
+  }
+  if(act==='field'){
+    const [side,field]=value.split('|');
+    if(!E.manifestFields.includes(field))return;
+    if(!compareSide || side===compareSide){
+      compareSide=side;compareField=field;paintPanel();return;
+    }
+    const expected=compare.same?'cargo':'voyage';
+    if(field!==compareField || field!==expected){
+      compareSide='';compareField='';paintPanel();
+      notify(expected==='voyage'?'Один рейс узнают по одному и тому же идентификатору.':'Проверьте назначение груза. Время выгрузки не объясняет, кого везли.');
+      return;
+    }
+    compareSide='';compareField='';
+    if(!compare.same){compare.same=field;paintPanel();return;}
+    compare.different=field;
+    act='combine';
+  }
   if(act==='close'){closePanel();return;}
   if(act==='speech-next'){speechPage++;render();return;}
   if(act==='dismiss-thought'){thoughtOpen=false;render();return;}
@@ -245,6 +279,7 @@ document.addEventListener('click',event=>{
     const firstVisit=act==='move'&&!state.visited.includes(value);
     state=result.state;
     if(act==='move'){thoughtOpen=firstVisit;closePanel();}
+    if(act==='next-intro'&&state.intro===C.intro.length)thoughtOpen=true;
     if(act==='topic'||act==='talk'||act==='end-talk')speechPage=0;
     if(act==='dock')closePanel();
     if(act==='read')documentId=value;
