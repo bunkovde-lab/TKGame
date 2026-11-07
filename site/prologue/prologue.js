@@ -23,6 +23,7 @@ let thoughtOpen = !state.visited.includes(state.room);
 let speechPage = 0;
 let links = [];
 let pendingLink = null;
+let deskResult = '';
 let pickFrom = null;
 let deskDrag = null;
 let dialRot = 0;
@@ -147,6 +148,7 @@ function deskBody(){
     '<div class="desk-links">'+links.map((l,i)=>'<button type="button" class="link-chip '+l.kind+'" data-act="link-remove" data-value="'+i+'" aria-label="Убрать связь">'+
       esc(D.labels[l.a])+' ↔ '+esc(D.labels[l.b])+' · '+(l.kind==='same'?'совпадает':'противоречит')+' <b aria-hidden="true">✕</b></button>').join('')+'</div>'+
     '<div class="actions">'+btn('link-check','','Проверить связи ('+links.length+' из 2)',{primary:true,disabled:links.length!==2||Boolean(pendingLink)})+'</div>'+
+    (deskResult?'<div id="desk-result" class="desk-result" role="alert">'+esc(deskResult)+'</div>':'')+
     '<small>Тяните пальцем от поля к полю или нажмите поле слева, потом поле справа. Нажмите на связь внизу, чтобы убрать её.</small>';
 }
 function drawLines(){
@@ -449,7 +451,7 @@ function paintPanel() {
         '<a class="btn-link" href="../">К тестовой версии</a></div>';
       break;
   }
-  dialog.innerHTML='<header class="panel-head"><h2 id="panel-title">'+esc(title)+'</h2>'+btn('close','','Закрыть')+'</header><div id="panel-feedback" role="status"></div><div class="panel-body">'+body+'</div>';
+  dialog.innerHTML='<div class="panel-top"><header class="panel-head"><h2 id="panel-title">'+esc(title)+'</h2>'+btn('close','','Закрыть')+'</header><div id="panel-feedback" role="status"></div></div><div class="panel-body">'+body+'</div>';
   if(activePanel==='desk')requestAnimationFrame(drawLines);
 }
 dialog.addEventListener('close',()=>{activePanel='';});
@@ -462,10 +464,18 @@ document.addEventListener('click',event=>{
     if(value==='safe'){dialEntered=[];}
     openPanel(value);return;
   }
-  if(act==='link-kind'&&pendingLink){links.push({...pendingLink,kind:value});pendingLink=null;paintPanel();return;}
+  if(act==='link-kind'&&pendingLink){deskResult='';links.push({...pendingLink,kind:value});pendingLink=null;paintPanel();return;}
   if(act==='link-cancel'){pendingLink=null;pickFrom=null;paintPanel();return;}
-  if(act==='link-remove'){links.splice(Number(value),1);paintPanel();return;}
-  if(act==='link-check'){run('deduce',{links:links.map(({a,b,kind})=>({a,b,kind}))});return;}
+  if(act==='link-remove'){deskResult='';links.splice(Number(value),1);paintPanel();return;}
+  if(act==='link-check'){
+    sfx.wake();
+    const result=run('deduce',{links:links.map(({a,b,kind})=>({a,b,kind}))});
+    if(!result.ok){
+      deskResult=result.message;sfx.fail();haptic(true,[90,50,90]);paintPanel();
+      document.getElementById('desk-result')?.scrollIntoView({block:'nearest',behavior:'smooth'});
+    } else {deskResult='';sfx.open();haptic(true,[40,60,40]);}
+    return;
+  }
   if(act==='dial-step'||act==='dial-fix')sfx.wake();
   if(act==='dial-step'){turnDial(dialRot-Number(value)*360/E.dialSize);return;}
   if(act==='dial-fix'){
