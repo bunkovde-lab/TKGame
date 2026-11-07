@@ -862,3 +862,66 @@ small, .muted { color: var(--muted); }
 .shake { animation: shake .45s ease-out !important; }
 @keyframes shake { 0%, 100% { transform: none; } 20% { transform: translateX(-7px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(2px); } }
 @media (prefers-reduced-motion: reduce) { .scene::after, .bars, .room-card, .dust-fx { display: none; } }
+
+/* =========================================================
+   Расширение пролога: пульс, цели, спор, запись, финал
+   ========================================================= */
+.slot { font-size: .72rem; padding: .15rem .5rem; border-radius: 99px; border: 1px solid #e5b87966; color: var(--gold); white-space: nowrap; }
+.slot.warn { color: #ff9a7a; border-color: #ff9a7a; animation: dot-pulse 1.6s ease-in-out infinite; }
+.goal { display: inline-flex; gap: .45rem; align-items: center; margin-top: .45rem; padding: .25rem .6rem; border-radius: 99px; background: #0b1119cc; border: 1px solid #e5b87955; font-size: .76rem; backdrop-filter: blur(4px); }
+.goal span { color: var(--gold); text-transform: uppercase; letter-spacing: .1em; font-size: .62rem; font-weight: 700; }
+.pulse-toggle.on { background: #5a1f24 !important; border-color: #ff6b6b !important; color: #ffd1d1 !important; }
+.press { border-color: #ff6b6b !important; color: #ffd1d1 !important; }
+.pulse-strip { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: .5rem; padding: .2rem .5rem; border-radius: .4rem; background: #1a0d10cc; border: 1px solid #ff6b6b44; }
+.pulse-strip svg { height: 26px; width: 100%; }
+.pulse-strip path { fill: none; stroke: #ff6b6b; stroke-width: 1.4; stroke-dasharray: 420; animation: ecg 2.4s linear infinite; }
+.pulse-strip.spike path { stroke: #ff3030; animation-duration: 1.1s; filter: drop-shadow(0 0 3px #ff3030); }
+.pulse-strip span { font-size: .72rem; color: #ffc2c2; white-space: nowrap; }
+.pulse-strip.spike span { color: #ff8080; font-weight: 700; }
+@keyframes ecg { from { stroke-dashoffset: 420; } to { stroke-dashoffset: 0; } }
+.choice em { justify-self: end; grid-column: 2; font-style: normal; font-size: .62rem; text-transform: uppercase; letter-spacing: .08em; color: #1d140a; background: var(--gold); padding: .05rem .4rem; border-radius: 99px; margin-top: .15rem; }
+.choice.fresh { border-left-color: #8fe39b; }
+.objectives ul { list-style: none; margin: 0 0 .5rem; padding: 0; display: grid; gap: .3rem; }
+.objectives li { display: grid; grid-template-columns: 1.3rem 1fr; gap: .35rem; font-size: .9rem; }
+.objectives li b { color: var(--muted); }
+.objectives li.done { color: var(--muted); text-decoration: line-through; text-decoration-color: #ffffff40; }
+.objectives li.done b { color: #8fe39b; }
+.objectives .side li { font-size: .85rem; }
+.argue-lines { display: grid; gap: .5rem; }
+.argue-line { display: grid; grid-template-columns: 3rem 1fr; gap: .6rem; align-items: start; animation: rise .5s var(--ease-out) both; animation-delay: calc(var(--i) * .35s); }
+.argue-line.right { grid-template-columns: 1fr 3rem; }
+.argue-line.right .avatar { order: 2; }
+.argue-line > div { padding: .45rem .65rem; border-radius: .6rem; background: #202c38; border: 1px solid var(--edge); }
+.argue-line.right > div { background: #2a2420; }
+.argue-line strong { color: var(--gold); font-size: .8rem; }
+.argue-line p { font: .95rem/1.4 Georgia, serif; }
+.avatar { width: 3rem; height: 4.2rem; object-fit: cover; object-position: top; border-radius: .5rem; background: #0e151d; border: 1px solid var(--edge); }
+.audio-card { display: grid; gap: .6rem; }
+.wave { width: 100%; height: 4.5rem; background: #0b1016; border-radius: .5rem; }
+.wave rect { fill: #4a6a7a; }
+.wave rect.got { fill: var(--gold); }
+.wave line { stroke: #ff6b6b; stroke-width: .8; }
+.audio-text { min-height: 3.2em; font: italic 1.05rem/1.45 Georgia, serif; color: #f0e2c8; padding: .4rem .6rem; border-left: 3px solid var(--gold); background: #0e151d; border-radius: .3rem; letter-spacing: .02em; }
+.audio-found { display: grid; gap: .25rem; font-size: .82rem; color: var(--muted); }
+.audio-found .on { color: #f0e2c8; }
+.team-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
+.team-card { display: grid; gap: .25rem; text-align: left; padding: .65rem .7rem; border-radius: .7rem; background: #0f1824e6; border: 1px solid var(--edge); color: var(--ink); transition: transform .15s, border-color .2s, background .2s; }
+.team-card small { color: var(--muted); font-size: .78rem; }
+.team-card .mood { justify-self: start; font-size: .62rem; letter-spacing: .06em; text-transform: uppercase; padding: .1rem .4rem; border-radius: 99px; border: 1px solid currentColor; }
+.team-card.on { border-color: var(--gold); background: #2c2416f0; box-shadow: 0 0 0 2px #e5b87966; }
+.team-card:active { transform: scale(.97); }
+.ending .intro-copy { width: min(42rem, 92%); max-height: calc(100% - 2rem); overflow-y: auto; }
+.results { display: grid; gap: .6rem; }
+.res-block { padding: .55rem .7rem; border-radius: .6rem; background: #0d141dd9; border: 1px solid var(--edge); animation: rise .5s var(--ease-out) both; }
+.res-block:nth-child(2) { animation-delay: .1s; } .res-block:nth-child(3) { animation-delay: .2s; } .res-block:nth-child(4) { animation-delay: .3s; }
+.res-block h3 { font-size: .72rem; letter-spacing: .12em; text-transform: uppercase; color: var(--gold); margin-bottom: .3rem; }
+.res-path { display: flex; flex-wrap: wrap; gap: .4rem; }
+.res-path span { padding: .2rem .55rem; border-radius: 99px; border: 1px solid var(--edge); font-size: .82rem; }
+.res-path span.on { border-color: var(--gold); color: var(--gold); }
+.res-small { font-size: .82rem; line-height: 1.4; }
+.res-small.missed { color: #ff9a7a; margin-top: .25rem; }
+.results .crew-summary { margin: 0; }
+.results em { color: #8fe39b; font-style: normal; font-size: .8rem; }
+@media (max-width: 760px) { .ending .intro-copy { left: .8rem; right: .8rem; width: auto; bottom: 1rem; } .slot { font-size: .64rem; padding: .1rem .4rem; } .top .clock { font-size: .7rem; } }
+.pulse-strip { grid-template-columns: minmax(4rem, 1fr) minmax(0, 2fr); }
+.pulse-strip span { white-space: normal; line-height: 1.25; }

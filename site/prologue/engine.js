@@ -5,7 +5,13 @@
   const crewRooms = { mara: 'cockpit', corvin: 'lab', irena: 'analysis', rein: 'airlock' };
   const itemRooms = { badge: 'office', sample: 'lab' };
   const briefingDocuments = ['order', 'manifestPort', 'manifestInternal'];
-  const documentIds = [...briefingDocuments, 'analysis', 'lab', 'dalNote', 'irenaTrace', 'versions'];
+  const secretDocs = { mara: 'secretMara', corvin: 'secretCorvin', irena: 'secretIrena', rein: 'secretRein' };
+  const documentIds = [...briefingDocuments, 'analysis', 'lab', 'dalNote', 'irenaTrace', 'versions', 'dalAudio', ...Object.values(secretDocs)];
+  // Свидетель пульса: на каком базовом вопросе у каждого срывается пульс
+  const pulseTriggers = { mara: 1, corvin: 2, irena: 2, rein: 1 };
+  const pulseStates = ['seen', 'closed', 'revealed'];
+  const audioFragments = ['a', 'b', 'c'];
+  const slotDeadline = 12;
   const showRules = {
     dalNote: { need: 1, high: { mara: 1, corvin: 1, irena: 1, rein: 1 }, low: { mara: -1, corvin: 0, irena: 0, rein: -1 } },
     versions: { need: 0, high: { mara: 0, corvin: 0, irena: 0, rein: 0 }, low: { mara: 0, corvin: 0, irena: 0, rein: 0 } }
@@ -19,7 +25,18 @@
   // Отношения по лору: профессиональное доверие, личная близость и поддержка методов — отдельно.
   const methodLikes = { mara: ['calc', 'law'], corvin: ['mercy', 'calc'], irena: ['law', 'mercy'], rein: ['calc', 'law'] };
   const axes = ['trust', 'close'];
-  const bondReasons = ['reply', 'show', 'priority', 'versions', 'lab', 'dock', 'memory'];
+  const bondReasons = ['reply', 'show', 'priority', 'versions', 'lab', 'dock', 'memory', 'secret', 'pressure', 'argument', 'late', 'team'];
+  const topicConditions = {
+    lab: state => state.lab, deduction: state => state.deduction, safeOpen: state => state.safeOpen,
+    versions: state => state.versions, priority: state => Boolean(state.priority), audio: state => state.audio,
+    irenaTrace: state => state.documents.includes('irenaTrace'), argument: state => Boolean(state.argument)
+  };
+  function topicList(state, crewId) {
+    const crew = window.PROLOGUE_CONTENT?.crew?.[crewId];
+    if (!crew) return [];
+    return [...crew.topics.map((topic, index) => ({ ...topic, index, open: true })),
+      ...(crew.extraTopics ?? []).map((topic, i) => ({ ...topic, index: crew.topics.length + i, open: Boolean(topicConditions[topic.when]?.(state)) }))];
+  }
   const clamp = value => Math.max(-3, Math.min(3, value));
   function bond(state, crewId, axis, delta, why) {
     if (!delta) return;
@@ -58,7 +75,8 @@
       bondLog: [], heard: [],
       safeFound: false, safeOpen: false,
       shown: { mara: [], corvin: [], irena: [], rein: [] }, said: null,
-      priority: null, versions: false, dockStyle: null
+      priority: null, versions: false, dockStyle: null,
+      pulse: { mara: null, corvin: null, irena: null, rein: null }, argument: null, audio: false, team: null, late: false
     };
   }
 
@@ -138,6 +156,15 @@
       if (state.task.done) remember(state.documents, 'analysis');
     }
     state.versions = state.task?.done === true && raw.versions === true;
+    for (const id of crewIds) {
+      state.pulse[id] = pulseStates.includes(raw.pulse?.[id]) ? raw.pulse[id] : null;
+      if (state.pulse[id] === 'revealed') remember(state.documents, secretDocs[id]);
+    }
+    state.argument = ['mara', 'rein', 'both'].includes(raw.argument) ? raw.argument : null;
+    state.audio = raw.audio === true;
+    if (state.audio) remember(state.documents, 'dalAudio');
+    state.late = state.docked && raw.late === true;
+    state.team = state.docked && Array.isArray(raw.team) && raw.team.length === 2 && new Set(raw.team).size === 2 && raw.team.every(id => crewIds.includes(id)) ? [...raw.team] : null;
     if (state.versions) remember(state.documents, 'versions');
     if (state.accepted) briefingDocuments.forEach(id => remember(state.documents, id));
     if (state.lab) remember(state.documents, 'lab');
@@ -145,7 +172,7 @@
       state.crew = raw.crew;
       state.topic = int(raw.topic) ? raw.topic : null;
       state.pose = poses.includes(raw.pose) ? raw.pose : 'neutral';
-      if (raw.said && showable.includes(raw.said.doc) && ['high', 'low'].includes(raw.said.tone)) state.said = { doc: raw.said.doc, tone: raw.said.tone };
+      if (raw.said && [...showable, 'secret'].includes(raw.said.doc) && ['high', 'low'].includes(raw.said.tone)) state.said = { doc: raw.said.doc, tone: raw.said.tone };
     }
     return state;
   }
@@ -158,7 +185,7 @@
       return { state, ok: true, message: [message, update].filter(Boolean).join(' ') };
     };
 
-    if (state.docked) return fail('Шаттл уже пристыкован.');
+    if (state.docked && action !== 'team') return fail('Шаттл уже пристыкован.');
     if (action === 'next-intro') {
       if (state.intro === 4) return fail('Вводная завершена.');
       state.intro += 1;
@@ -194,13 +221,64 @@
         state.topic = null;
         state.pose = 'neutral';
         return success();
-      case 'topic': {
+      case 'topic':
+      case 'pulse': {
         const index = Number(value);
-        const topic = window.PROLOGUE_CONTENT?.crew?.[state.crew]?.topics?.[index];
-        if (!Number.isInteger(index) || !topic) return fail('Реплика недоступна.');
+        const topic = topicList(state, state.crew)[index];
+        if (!Number.isInteger(index) || !topic?.open) return fail('Реплика недоступна.');
         state.topic = index;
         state.said = null;
         state.pose = poses.includes(topic.pose) ? topic.pose : 'neutral';
+        if (action === 'pulse') {
+          const hit = index === pulseTriggers[state.crew];
+          if (hit && !state.pulse[state.crew]) state.pulse[state.crew] = 'seen';
+          return success(hit ? 'Пульс сорвался на этом вопросе. Собеседник что-то недоговаривает.' : 'Пульс ровный.');
+        }
+        return success();
+      }
+      case 'press': {
+        const crewId = state.crew;
+        if (!crewId) return fail('Сначала начните разговор.');
+        if (!['seen', 'closed'].includes(state.pulse[crewId])) return fail('Пока не на что надавить.');
+        state.topic = null;
+        if (state.trust[crewId] >= 1 || state.close[crewId] >= 1) {
+          state.pulse[crewId] = 'revealed';
+          remember(state.documents, secretDocs[crewId]);
+          bond(state, crewId, 'close', 1, 'secret');
+          state.said = { doc: 'secret', tone: 'high' };
+          return success('Секрет записан в журнал.');
+        }
+        if (state.pulse[crewId] === 'seen') bond(state, crewId, 'trust', -1, 'pressure');
+        state.pulse[crewId] = 'closed';
+        state.said = { doc: 'secret', tone: 'low' };
+        return success('Слишком рано. Нужно больше доверия.');
+      }
+      case 'argue':
+        if (state.argument) return fail('Спор уже решён.');
+        if (!state.nav || !state.reader) return fail('Спорить пока не о чем.');
+        if (value === 'both' && state.trust.mara + state.trust.rein < 2) return fail('Чтобы примирить обоих, нужно больше доверия Мары и Рейна.');
+        if (!['mara', 'rein', 'both'].includes(value)) return fail('Выберите решение.');
+        state.argument = value;
+        if (value === 'mara') { bond(state, 'mara', 'trust', 1, 'argument'); bond(state, 'rein', 'trust', -1, 'argument'); state.path.calc += 1; }
+        if (value === 'rein') { bond(state, 'rein', 'trust', 1, 'argument'); bond(state, 'mara', 'trust', -1, 'argument'); state.path.mercy += 1; }
+        if (value === 'both') { bond(state, 'mara', 'close', 1, 'argument'); bond(state, 'rein', 'close', 1, 'argument'); state.path.law += 1; }
+        return success();
+      case 'listen': {
+        if (state.room !== 'office') return fail('Запись лежит в кабинете.');
+        if (state.audio) return fail('Запись уже расшифрована.');
+        const found = Array.isArray(value) ? [...new Set(value)].sort() : [];
+        if (found.join() !== audioFragments.join()) return fail('Расшифрованы не все фрагменты.');
+        state.audio = true;
+        remember(state.documents, 'dalAudio');
+        return success('Фрагменты записи Даля расшифрованы. Текст в журнале.', true);
+      }
+      case 'team': {
+        if (!state.docked) return fail('Группу собирают после стыковки.');
+        if (state.team) return fail('Группа уже собрана.');
+        const team = Array.isArray(value) ? [...new Set(value)] : [];
+        if (team.length !== 2 || !team.every(id => crewIds.includes(id))) return fail('Выберите двоих.');
+        state.team = team;
+        team.forEach(id => bond(state, id, 'close', 1, 'team'));
         return success();
       }
       case 'memory': {
@@ -336,6 +414,8 @@
           return fail('Перед стыковкой примите приказ, проложите маршрут, предъявите допуск в шлюзе, откалибруйте сканер и дождитесь сверки Ирены.');
         }
         state.docked = true;
+        state.late = state.tick > slotDeadline;
+        if (state.late) bond(state, 'mara', 'trust', -1, 'late');
         state.dockStyle = value === 'assisted' ? 'assisted' : 'clean';
         bond(state, 'mara', 'trust', value === 'clean' ? 1 : value === 'assisted' ? -1 : 0, 'dock');
         closeTalk(state);
@@ -345,5 +425,5 @@
     }
   }
 
-  window.PROLOGUE_ENGINE = { fresh, restore, dispatch, adjacent, period, dockReady, labChannels, manifestFields, deskFields, replies, safeCode, dialSize, rooms, showable, priorities, crewIds, methods, memoryOpen, methodLikes };
+  window.PROLOGUE_ENGINE = { fresh, restore, dispatch, adjacent, period, dockReady, labChannels, manifestFields, deskFields, replies, safeCode, dialSize, rooms, showable, priorities, crewIds, methods, memoryOpen, methodLikes, topicList, pulseTriggers, secretDocs, audioFragments, slotDeadline };
 })();
