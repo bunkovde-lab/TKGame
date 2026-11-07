@@ -778,3 +778,87 @@ small, .muted { color: var(--muted); }
 .crew-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); }
 .conversation.typing .after-type, .thought.typing .after-type { display: none; }
 .conversation .after-type { display: grid; gap: .45rem; animation: rise .35s var(--ease-out) both; }
+
+/* =========================================================
+   Окружение и кино: свет, индикаторы, пыль, зерно, полосы
+   ========================================================= */
+.fx { position: absolute; pointer-events: none; overflow: hidden; }
+.fx .glow {
+  position: absolute; left: var(--x); top: var(--y); width: calc(var(--r) * 2); aspect-ratio: 1; transform: translate(-50%, -50%);
+  border-radius: 50%; background: radial-gradient(circle, rgba(var(--c), .55) 0%, rgba(var(--c), .18) 35%, transparent 70%);
+  mix-blend-mode: screen; animation-delay: var(--d);
+}
+.fx .glow.flick { animation: flick 7s steps(1) infinite; animation-delay: var(--d); }
+.fx .glow.slow { animation: breathe 6s ease-in-out infinite; animation-delay: var(--d); }
+.fx .glow.screen { animation: screen 3.4s ease-in-out infinite; animation-delay: var(--d); }
+.fx .glow.engine { animation: engine .12s ease-in-out infinite alternate; }
+@keyframes flick {
+  0%, 100% { opacity: .85; } 12% { opacity: .9; } 13% { opacity: .35; } 14% { opacity: .95; } 15% { opacity: .5; } 16% { opacity: .9; }
+  55% { opacity: .8; } 56% { opacity: .25; } 58% { opacity: .85; } 80% { opacity: .95; }
+}
+@keyframes breathe { 50% { opacity: .55; transform: translate(-50%, -50%) scale(1.06); } }
+@keyframes screen { 0%, 100% { opacity: .7; } 30% { opacity: .95; } 31% { opacity: .6; } 33% { opacity: .9; } 70% { opacity: .75; } }
+@keyframes engine { from { opacity: .7; transform: translate(-50%, -50%) scale(.92); } to { opacity: 1; transform: translate(-50%, -50%) scale(1.08); } }
+.fx .blink {
+  position: absolute; left: var(--x); top: var(--y); width: .32rem; height: .32rem; border-radius: 50%; transform: translate(-50%, -50%);
+  background: rgb(var(--c)); box-shadow: 0 0 .4rem .15rem rgba(var(--c), .7); animation: blink var(--t) steps(1) infinite; animation-delay: var(--d);
+}
+@keyframes blink { 0%, 55% { opacity: 1; } 56%, 100% { opacity: .08; } }
+.fx .sweep { position: absolute; left: var(--x); top: var(--y); width: var(--w); height: var(--h); overflow: hidden; border-radius: 6%; }
+.fx .sweep i {
+  position: absolute; inset: -20% auto -20% 0; width: 35%; transform: translateX(-150%) skewX(-18deg);
+  background: linear-gradient(90deg, transparent, rgba(255, 236, 200, .28), rgba(255, 255, 255, .45), rgba(255, 236, 200, .28), transparent);
+  mix-blend-mode: screen; animation: sweep 19s ease-in-out infinite; animation-delay: var(--d);
+}
+@keyframes sweep { 0%, 82% { transform: translateX(-150%) skewX(-18deg); } 96%, 100% { transform: translateX(420%) skewX(-18deg); } }
+.fx .alarm { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 30%, rgba(255, 50, 40, .22), transparent 65%); mix-blend-mode: screen; animation: alarm 7s ease-in-out infinite; opacity: 0; }
+@keyframes alarm { 0%, 70%, 100% { opacity: 0; } 76% { opacity: 1; } 82% { opacity: .1; } 88% { opacity: .9; } 94% { opacity: 0; } }
+.dust-fx { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; }
+
+/* Зерно плёнки и виньетка поверх сцены */
+.scene::after {
+  content: ""; position: absolute; inset: -50%; z-index: 1; pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.55'/%3E%3C/svg%3E");
+  opacity: .07; mix-blend-mode: overlay; animation: grain .9s steps(6) infinite;
+}
+@keyframes grain { 0% { transform: translate(0, 0); } 20% { transform: translate(-3%, 2%); } 40% { transform: translate(2%, -4%); } 60% { transform: translate(-4%, -1%); } 80% { transform: translate(3%, 3%); } 100% { transform: translate(0, 0); } }
+.scene-art::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(3, 6, 10, .55) 100%); }
+
+/* Кинематографические полосы кадра */
+.bars { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+.bars i { position: absolute; left: 0; right: 0; height: 7vh; background: #000; transform: scaleY(0); animation: bar-in 1.2s var(--ease-out) .1s forwards; }
+.bars i:first-child { top: 0; transform-origin: top; }
+.bars i:last-child { bottom: 0; transform-origin: bottom; }
+@keyframes bar-in { to { transform: scaleY(1); } }
+.bars.top-only i { animation: none; height: 5vh; }
+.scene-speaking .bars.top-only i { transform: scaleY(1); }
+@media (max-width: 760px) { .bars i { height: 4.5vh; } .bars.top-only i { height: 3vh; } }
+.scene.intro .intro-copy { z-index: 3; }
+
+/* Наезд камеры на собеседника */
+.scene .scene-art { transform-origin: var(--actor-x, 67%) 40%; }
+.scene-speaking .scene-art { transform: scale(1.06); filter: brightness(.86) saturate(.95); }
+.scene.cam-in .scene-art { animation: cam-in 1.4s var(--ease-out) both; }
+.scene.cam-out .scene-art { animation: cam-out 1s var(--ease-out) both; }
+@keyframes cam-in { from { transform: none; filter: none; } to { transform: scale(1.06); filter: brightness(.86) saturate(.95); } }
+@keyframes cam-out { from { transform: scale(1.06); filter: brightness(.86); } to { transform: none; filter: none; } }
+.scene.cam-in .bars.top-only i { animation: bar-in .9s var(--ease-out) both; }
+.scene.cam-out .bars.top-only i { animation: bar-in .6s ease reverse both; }
+
+/* Титр комнаты при первом входе */
+.room-card {
+  position: absolute; left: 50%; top: 42%; z-index: 4; transform: translate(-50%, -50%); text-align: center; pointer-events: none;
+  display: grid; gap: .3rem; animation: card 2.6s ease both; text-shadow: 0 .2rem 1.2rem #000;
+}
+.room-card small { letter-spacing: .4em; text-transform: uppercase; color: var(--gold); font-size: .72rem; }
+.room-card strong { font: 400 clamp(1.8rem, 6vw, 3.4rem)/1.05 Georgia, serif; letter-spacing: .06em; white-space: nowrap; }
+.room-card::before, .room-card::after { content: ""; height: 1px; background: linear-gradient(90deg, transparent, var(--gold), transparent); }
+@keyframes card { 0% { opacity: 0; letter-spacing: .2em; } 20%, 70% { opacity: 1; letter-spacing: normal; } 100% { opacity: 0; } }
+
+/* Дрожь корпуса и толчок при ошибке */
+.scene.tremor { animation: tremor 1.2s ease-out; }
+.scene.tremor .fx .glow { animation: flick .6s steps(1) 2; }
+@keyframes tremor { 0%, 100% { transform: none; } 10% { transform: translate(2px, -1px); } 20% { transform: translate(-3px, 2px); } 30% { transform: translate(2px, 1px); } 40% { transform: translate(-2px, -2px); } 55% { transform: translate(1px, 1px); } 70% { transform: translate(-1px, 0); } }
+.shake { animation: shake .45s ease-out !important; }
+@keyframes shake { 0%, 100% { transform: none; } 20% { transform: translateX(-7px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(2px); } }
+@media (prefers-reduced-motion: reduce) { .scene::after, .bars, .room-card, .dust-fx { display: none; } }
