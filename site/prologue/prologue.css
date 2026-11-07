@@ -980,3 +980,48 @@ small, .muted { color: var(--muted); }
 .gauge.open .gauge-pips i.on { background: #6fdc9f; }
 .interro-step { color: #9aa6b8; }
 @media (prefers-reduced-motion: reduce) { .lens-strip, .lens-strip.voice rect, .lens-strip.eyes.hit b, .silence-fidget.pop { animation: none; } }
+
+/* Сцены экипажа: разгерметизация, медосмотр, карта */
+.scene-btn { border-color: #b48cff99 !important; color: #e4d6ff !important; }
+.scene-hint { font-size: .82rem; color: #cfe2ff; background: #7fb4ff14; border-left: 3px solid #7fb4ff; padding: .4rem .6rem; border-radius: .3rem; }
+.br-help { font-size: .82rem; color: var(--muted, #9aa6b8); }
+.br-tech { font-size: .82rem; color: #ffd27f; font-style: italic; animation: lens-in .3s ease-out; }
+.breach-board { display: grid; gap: 0; border: 1px solid #ffffff22; border-radius: .6rem; overflow: hidden; }
+.br-room { display: flex; justify-content: space-between; align-items: center; padding: .55rem .8rem; background: #0f1824; transition: background .5s; min-height: 2.6rem; }
+.br-room.leak { background: repeating-linear-gradient(135deg, #3a0f14, #3a0f14 8px, #2a0a0e 8px, #2a0a0e 16px); color: #ffb3a8; }
+.breach-board.live .br-room.leak { animation: leak-flash 1s ease-in-out infinite; }
+@keyframes leak-flash { 50% { filter: brightness(1.35); } }
+.br-who { display: flex; gap: .3rem; font-style: normal; }
+.br-who i { font-style: normal; }
+.br-who .ppl { color: #6fdc9f; } .br-who .tech { color: #ffd27f; } .br-who .rein { color: #7fb4ff; }
+.br-door { display: flex; justify-content: space-between; align-items: center; padding: .2rem .8rem; background: #1a2230; border-block: 1px dashed #ffffff22; font-size: .72rem; color: #9aa6b8; text-transform: uppercase; letter-spacing: .08em; }
+.br-door .btn { min-height: 32px; padding: .15rem .7rem; font-size: .74rem; }
+.br-door.shut { background: #e5b87933; border-block: 2px solid var(--gold); color: var(--gold); }
+.br-door.locked .btn { border-color: #ff6b6b88; }
+.br-msg { margin-top: .5rem; padding: .45rem .6rem; border-radius: .4rem; background: #ff6b6b1c; color: #ffc2c2; font-size: .84rem; animation: lens-in .3s ease-out; }
+.br-msg.lock { background: #ffd27f1c; color: #ffe0a3; font-family: ui-monospace, monospace; }
+.br-time { text-align: right; font-family: ui-monospace, monospace; color: #9aa6b8; margin-top: .3rem; }
+.autopsy { display: grid; grid-template-columns: minmax(7rem, 1fr) 2fr; gap: .8rem; align-items: start; }
+.body-fig { width: 100%; max-height: 18rem; }
+.body-fig circle, .body-fig rect { fill: #1d2838; stroke: #7fb4ff55; stroke-width: .6; }
+.bmark circle { fill: #ff8a7a !important; stroke: #fff !important; animation: dot-pulse 1.6s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.bmark.set circle { fill: #6fdc9f !important; animation: none; }
+.bmark text { font-size: 3.6px; text-anchor: middle; fill: #10151d; font-weight: 700; }
+.amarks { display: grid; gap: .55rem; }
+.amark { display: grid; gap: .25rem; }
+.amark small { color: #c9d2de; font-size: .78rem; }
+.seg-row { display: flex; gap: .3rem; flex-wrap: wrap; }
+.clues { margin: .3rem 0 .5rem 1.2rem; font-size: .84rem; color: #ffe0a3; }
+.star-map { display: block; width: 100%; max-height: 24rem; margin-inline: auto; background: radial-gradient(circle at 30% 30%, #13213a, #070b12); border-radius: .6rem; border: 1px solid #ffffff1c; }
+.star-map .lane { stroke: #7fb4ff40; stroke-width: .5; }
+.star-map .mara { stroke: var(--gold); stroke-width: 1.2; stroke-linecap: round; }
+.star-map .dal-lane { stroke: #ff6b6b; stroke-width: 1; stroke-dasharray: 2 1.4; animation: dash 1.2s linear infinite; }
+@keyframes dash { to { stroke-dashoffset: -6.8; } }
+.rnode { cursor: pointer; }
+.rnode circle { fill: #1d2838; stroke: #7fb4ff; stroke-width: .6; transition: fill .2s; }
+.rnode:hover circle { fill: #2a3d5a; }
+.rnode.on circle { fill: var(--gold); stroke: #fff; }
+.rnode.dal circle { stroke: #ff6b6b; stroke-width: .9; }
+.rnode text { font-size: 3.3px; fill: #dbe5f2; pointer-events: none; paint-order: stroke; stroke: #070b12; stroke-width: .8px; }
+@media (max-width: 560px) { .autopsy { grid-template-columns: 1fr; } .body-fig { max-height: 11rem; } }
+@media (prefers-reduced-motion: reduce) { .breach-board.live .br-room.leak, .bmark circle, .star-map .dal-lane { animation: none; } }
