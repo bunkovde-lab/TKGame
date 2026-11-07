@@ -5,9 +5,16 @@
   const crewRooms = { mara: 'cockpit', corvin: 'lab', irena: 'analysis', rein: 'airlock' };
   const itemRooms = { badge: 'office', sample: 'lab' };
   const briefingDocuments = ['order', 'manifestPort', 'manifestInternal'];
-  const documentIds = [...briefingDocuments, 'analysis', 'lab'];
+  const documentIds = [...briefingDocuments, 'analysis', 'lab', 'dalNote'];
+  const replies = ['law', 'calc', 'mercy'];
+  const crewIds = ['mara', 'corvin', 'irena', 'rein'];
+  const replyLikes = { law: ['irena'], calc: ['mara', 'rein'], mercy: ['corvin'] };
+  const deskFields = ['voyage', 'route', 'cargo', 'time'];
+  const deskAnswer = ['cargo|cargo|diff', 'voyage|voyage|same'];
+  const safeCode = [6, 9, 4];
+  const dialSize = 20;
   const labChannels = ['sample', 'baseline', 'noise'];
-  const manifestFields = ['voyage', 'cargo', 'time'];
+  const manifestFields = deskFields;
   const poses = ['neutral', 'focus', 'guarded'];
 
   function fresh() {
@@ -16,7 +23,10 @@
       nav: false, docked: false, reader: false, sampleReady: false,
       inventory: [], inspected: [], documents: [], reviewed: [],
       visited: [], thoughts: [], crew: null, topic: null, pose: 'neutral',
-      task: null, lab: false, deduction: false, routeNote: null
+      task: null, lab: false, deduction: false, routeNote: null,
+      reply: null, path: { law: 0, calc: 0, mercy: 0 },
+      trust: { mara: 0, corvin: 0, irena: 0, rein: 0 },
+      safeFound: false, safeOpen: false
     };
   }
 
@@ -70,8 +80,17 @@
     state.documents = validArray(raw.documents, documentIds);
     state.reviewed = validArray(raw.reviewed, state.documents);
     state.visited = validArray(raw.visited, rooms);
-    state.thoughts = validArray(raw.thoughts, [...rooms, ...documentIds, ...Object.keys(itemRooms), 'deduction']);
+    state.thoughts = validArray(raw.thoughts, [...rooms, ...documentIds, ...Object.keys(itemRooms), 'deduction', 'trace']);
     state.routeNote = state.nav ? 'Лунный арбитраж' : null;
+    state.reply = replies.includes(raw.reply) ? raw.reply : null;
+    for (const id of replies) state.path[id] = int(raw.path?.[id]) ? Math.min(raw.path[id], 99) : 0;
+    for (const id of crewIds) {
+      const value = raw.trust?.[id];
+      state.trust[id] = Number.isSafeInteger(value) ? Math.max(-3, Math.min(3, value)) : 0;
+    }
+    state.safeFound = raw.safeFound === true;
+    state.safeOpen = state.safeFound && raw.safeOpen === true;
+    if (state.safeOpen) remember(state.documents, 'dalNote');
     if (raw.task && int(raw.task.due)) {
       state.task = { due: raw.task.due, done: raw.task.done === true || state.tick >= raw.task.due };
       if (state.task.done) remember(state.documents, 'analysis');
@@ -109,9 +128,13 @@
     switch (action) {
       case 'accept':
         if (state.room !== 'office' || state.accepted) return fail('Приказ доступен на терминале кабинета.');
+        if (!replies.includes(value)) return fail('Выберите, как ответить Центру.');
         state.accepted = true;
+        state.reply = value;
+        state.path[value] += 1;
+        replyLikes[value].forEach(id => { state.trust[id] = Math.min(3, state.trust[id] + 1); });
         briefingDocuments.forEach(id => remember(state.documents, id));
-        return success('Приказ принят. Обе ведомости доступны в журнале.');
+        return success('Ответ отправлен в Центр. Обе ведомости доступны на рабочем столе.');
       case 'move':
         if (!adjacent(state.room).includes(value)) return fail('Прямого перехода в это помещение нет.');
         state.room = value;
@@ -174,8 +197,13 @@
       case 'deduce':
         if (state.room !== 'office' || !state.accepted) return fail('Откройте ведомости на рабочем столе в кабинете.');
         if (state.deduction) return fail('Вывод уже записан.');
-        if (value?.same !== 'voyage' || value?.different !== 'cargo') {
-          return fail('Свяжите бумаги одним идентификатором, затем найдите различие в том, как описан груз.');
+        const links = Array.isArray(value?.links) ? value.links : [];
+        const keys = links.filter(link => deskFields.includes(link?.a) && deskFields.includes(link?.b) && ['same', 'diff'].includes(link?.kind))
+          .map(link => link.a + '|' + link.b + '|' + link.kind);
+        if (links.length !== 2 || keys.length !== 2) return fail('Нужны ровно две связи между ведомостями.');
+        const right = keys.filter(key => deskAnswer.includes(key)).length;
+        if (right !== 2 || keys[0] === keys[1]) {
+          return fail('Верных связей: ' + (keys[0] === keys[1] ? Math.min(right, 1) : right) + ' из 2. Одна связь должна доказывать, что это один рейс, другая — показывать, что изменился смысл перевозки.');
         }
         state.deduction = true;
         remember(state.thoughts, 'deduction');
@@ -185,6 +213,22 @@
         if (state.task) return fail(state.task.done ? 'Поручение уже выполнено.' : 'Ирена уже сверяет записи.');
         state.task = { due: state.tick + 3, done: false };
         return success('Ирена приняла поручение. Сверка займёт три единицы корабельного времени.');
+      case 'trace':
+        if (state.room !== 'office') return fail('След остался на столе в кабинете.');
+        if (state.safeFound) return fail('Ящик уже найден.');
+        state.safeFound = true;
+        remember(state.thoughts, 'trace');
+        return success('Под столешницей нашёлся запертый ящик с кодовым диском.');
+      case 'unlock': {
+        if (state.room !== 'office' || !state.safeFound) return fail('Здесь нечего открывать.');
+        if (state.safeOpen) return fail('Ящик уже открыт.');
+        const code = Array.isArray(value) ? value : [];
+        if (code.length !== 3 || code.some((n, i) => n !== safeCode[i])) return fail('Механизм щёлкнул и сбросился. Комбинация неверна.');
+        state.safeOpen = true;
+        remember(state.documents, 'dalNote');
+        remember(state.thoughts, 'dalNote');
+        return success('Ящик открыт. Внутри записка Даля, она в журнале.', true);
+      }
       case 'nav':
         if (state.room !== 'cockpit' || !state.accepted) return fail('Для расчёта маршрута нужны кабина и принятый приказ.');
         if (state.nav) return fail('Маршрут уже проложен.');
@@ -205,5 +249,5 @@
     }
   }
 
-  window.PROLOGUE_ENGINE = { fresh, restore, dispatch, adjacent, period, dockReady, labChannels, manifestFields, rooms };
+  window.PROLOGUE_ENGINE = { fresh, restore, dispatch, adjacent, period, dockReady, labChannels, manifestFields, deskFields, replies, safeCode, dialSize, rooms };
 })();
