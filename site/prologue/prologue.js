@@ -68,7 +68,7 @@ function render() {
   const head='<header class="top"><span class="brand">◈ TKGame · Мир Раскола</span><span class="top-title">Дела контрразведки / Пролог</span><small>'+esc(period)+'</small></header>';
   if (state.intro<C.intro.length || state.docked) {
     const end=state.docked;
-    const frame=end?{title:'Стыковка завершена',text:'Шлюз станции принял захваты. У вас есть приказ, рабочая версия и материалы экипажа. Первое дело начнётся за этой дверью.'}:C.intro[state.intro];
+    const frame=end?{title:'Стыковка завершена',text:(C.docking[state.dockStyle]?C.docking[state.dockStyle]+' ':'')+'У вас есть приказ, рабочая версия и материалы экипажа. Первое дело начнётся за этой дверью.'}:C.intro[state.intro];
     app.innerHTML='<main class="game">'+head+'<section class="scene intro" style="--art:url(assets/'+(end?'dock':'intro-'+state.intro)+'.webp)"><div class="intro-copy"><div class="kicker">'+
       (end?'Конец пролога':'Пролог · '+(state.intro+1)+' / '+C.intro.length)+'</div><h1>'+esc(frame.title)+'</h1>'+p(frame.text)+'<div class="actions">'+
       (end?btn('restart','','Начать пролог заново',{primary:true})+btn('panel','system','Сохранения')+'<a class="btn-link" href="../">К тестовой версии</a>':
@@ -91,9 +91,11 @@ function render() {
   },[]) ?? [];
   const hasMore=speechPage<pages.length-1;
   const conversation=crew?'<section class="conversation" aria-label="Разговор"><div class="speaker"><strong class="speaker-name">'+esc(crew.name)+'</strong><span class="speaker-role">'+esc(crew.role)+'</span></div>'+
-    p(pages[speechPage] ?? (state.reply&&C.reactions[state.crew]?.[state.reply]) ?? crew.greeting ?? 'Командир. Слушаю вас.')+
+    p((state.said&&C.show[state.said.doc]?.[state.crew]?.[state.said.tone]) || (pages[speechPage] ?? (state.reply&&C.reactions[state.crew]?.[state.reply]) ?? crew.greeting ?? 'Командир. Слушаю вас.'))+
     '<div class="reply">'+(hasMore?btn('speech-next','','Дальше →',{primary:true}):crew.topics.map((entry,index)=>btn('topic',index,entry.question)).join(''))+'</div><div class="conversation-tools actions">'+
     (!hasMore&&state.crew==='irena'?btn('assign','','Поручить проверку ведомости',{disabled:!state.deduction||Boolean(state.task)}):'')+
+    (!hasMore&&state.crew==='rein'&&!state.priority?btn('panel','evacuation','Задать порядок эвакуации'):'')+
+    (!hasMore?E.showable.filter(doc=>state.documents.includes(doc)&&!state.shown[state.crew].includes(doc)).map(doc=>btn('show',doc,C.show[doc].label)).join(''):'')+
     btn('panel','crew-bio','Досье')+btn('end-talk','','Завершить разговор')+'</div></section>':'';
   const thought=!crew&&thoughtOpen?'<div class="thought"><div class="kicker">Внутренний голос</div>'+p(room.thought)+btn('dismiss-thought','','Продолжить')+'</div>':'';
   const hud=[['hero','Герой'],['inventory','Инвентарь'],['journal','Журнал'],['map','Карта'],['ship','Шаттл'],['system','Меню']]
@@ -329,6 +331,169 @@ function safeBody(){
     '<div class="actions">'+btn('dial-step','-1','◀')+btn('dial-fix','','Зафиксировать цифру',{primary:true})+btn('dial-step','1','▶')+btn('dial-reset','','Сбросить')+'</div>'+
     '<small>Вращайте диск пальцем. Когда под меткой нужная цифра, механизм отзывается щелчком: метка вспыхивает, телефон коротко вибрирует.</small>';
 }
+/* Лаборатория: подогнать спектр образца под эталон */
+let labShift=(Math.random()<.5?-1:1)*(18+Math.random()*16);
+let labGain=Math.random()<.5?.55:1.55;
+let labResult='';
+const labCurve=(shift,gain)=>{
+  let d='';
+  for(let x=0;x<=150;x+=1.5){
+    const u=x+shift;
+    const peak=[30,75,120].reduce((sum,c)=>sum+Math.exp(-Math.pow((u-c)/5,2)),0);
+    d+=(x?'L':'M')+x.toFixed(1)+' '+(40-22*gain*peak).toFixed(1);
+  }
+  return d;
+};
+function labMatch(){return Math.max(0,Math.round(100-Math.abs(labShift)*3-Math.abs(labGain-1)*120));}
+function labBody(){
+  return '<div class="card lab-scope"><strong>Эталон на корпусе кассеты и отклик сканера</strong>'+
+    '<svg viewBox="0 0 150 46" class="lab-svg" aria-hidden="true"><path d="M0 40H150" class="lab-axis"/>'+
+    '<path d="'+labCurve(0,1)+'" class="lab-ref"/><path id="lab-sample" d="'+labCurve(labShift,labGain)+'" class="lab-sample"/></svg>'+
+    '<label class="lab-slider">Сдвиг частоты<input type="range" id="lab-shift" min="-40" max="40" step="0.5" value="'+labShift+'"></label>'+
+    '<label class="lab-slider">Усиление<input type="range" id="lab-gain" min="0.4" max="1.8" step="0.01" value="'+labGain+'"></label>'+
+    '<div class="lab-match">Совпадение: <b id="lab-match">'+labMatch()+'%</b></div></div>'+
+    '<div class="actions">'+btn('lab-fix','','Зафиксировать калибровку',{primary:true})+'</div>'+
+    (labResult?'<div class="desk-result" role="alert">'+esc(labResult)+'</div>':'')+
+    '<small>Совместите яркую кривую с тусклым эталоном. Нужно не меньше 90%.</small>';
+}
+let labLastHit=false;
+dialog.addEventListener('input',event=>{
+  if(event.target.id==='lab-shift')labShift=Number(event.target.value);
+  else if(event.target.id==='lab-gain')labGain=Number(event.target.value);
+  else return;
+  labResult='';
+  document.getElementById('lab-sample')?.setAttribute('d',labCurve(labShift,labGain));
+  const m=labMatch();const out=document.getElementById('lab-match');
+  if(out){out.textContent=m+'%';out.classList.toggle('ok',m>=90);}
+  if(m>=90&&!labLastHit){sfx.wake();sfx.click(true);haptic(true,30);}
+  labLastHit=m>=90;
+});
+/* Шлюз: проверка навыка у считывателя */
+let readerCheck=null;
+function newZone(){return {zone:40+Math.random()*260,width:44,great:14,start:performance.now(),speed:230,raf:0};}
+function readerAngle(){return readerCheck?((performance.now()-readerCheck.start)/1000*readerCheck.speed)%360:0;}
+function readerBody(){
+  if(!readerCheck)readerCheck=newZone();
+  const z=readerCheck;
+  const arc=(from,width,r)=>{
+    const a1=(from-90)*Math.PI/180,a2=(from+width-90)*Math.PI/180;
+    return 'M'+(r*Math.cos(a1)).toFixed(2)+' '+(r*Math.sin(a1)).toFixed(2)+' A'+r+' '+r+' 0 0 1 '+(r*Math.cos(a2)).toFixed(2)+' '+(r*Math.sin(a2)).toFixed(2);
+  };
+  return p('Считыватель сбоит: карта проходит только в момент синхронизации. Нажмите, когда стрелка в золотой зоне. Узкая светлая полоса — идеально.')+
+    '<button type="button" class="skill-check" data-act="reader-tap" aria-label="Нажать сейчас"><svg viewBox="-60 -60 120 120" aria-hidden="true">'+
+    '<circle r="46" class="skill-ring"/><path d="'+arc(z.zone,z.width,46)+'" class="skill-zone"/><path d="'+arc(z.zone+(z.width-z.great)/2,z.great,46)+'" class="skill-great"/>'+
+    '<g id="skill-needle"><line x1="0" y1="0" x2="0" y2="-52" class="skill-needle"/></g><circle r="5" class="skill-hub"/></svg><span>Сейчас!</span></button>';
+}
+function startReader(){
+  if(!readerCheck||readerCheck.raf)return;
+  const tick=()=>{
+    const n=document.getElementById('skill-needle');
+    if(!n||!readerCheck){if(readerCheck)readerCheck.raf=0;return;}
+    n.setAttribute('transform','rotate('+readerAngle().toFixed(1)+')');
+    readerCheck.raf=requestAnimationFrame(tick);
+  };
+  readerCheck.raf=requestAnimationFrame(tick);
+}
+function stopReader(){if(readerCheck?.raf){cancelAnimationFrame(readerCheck.raf);readerCheck.raf=0;}}
+function readerTap(){
+  if(!readerCheck)return;
+  const a=readerAngle(),z=readerCheck;
+  const inside=(x,from,w)=>{const d=((x-from)%360+360)%360;return d<=w;};
+  stopReader();
+  if(inside(a,z.zone,z.width)){
+    const great=inside(a,z.zone+(z.width-z.great)/2,z.great);
+    readerCheck=null;sfx.click(true);haptic(true,great?[30,40,30]:50);
+    const result=run('use','badge');
+    if(result.ok&&great)notify(result.message+' Идеальная синхронизация.');
+  } else {
+    sfx.fail();haptic(true,[120]);
+    readerCheck=newZone();readerCheck.speed=200+Math.random()*80;
+    notify('Считыватель сбросил карту. Попробуйте ещё раз.');
+    paintPanel();
+  }
+}
+/* Пост аналитика: журнал версий */
+let versionResult='';
+function versionsBody(){
+  const V=C.versions;
+  return '<h3>Журнал версий</h3>'+p(V.prompt)+'<div class="versions">'+V.list.map((ver,i)=>
+    '<div class="card version"><div class="kicker">Версия '+(i+1)+' · '+esc(ver.time)+'</div>'+
+    Object.keys(V.labels).map(f=>{
+      const changed=i>0&&V.list[i-1][f]!==ver[f];
+      return '<button type="button" class="version-field'+(changed?' changed':'')+'" data-act="version-pick" data-value="'+(i+1)+'|'+f+'"><small>'+esc(V.labels[f])+'</small><span>'+esc(ver[f])+'</span></button>';
+    }).join('')+'</div>').join('')+'</div>'+
+    (versionResult?'<div class="desk-result" role="alert">'+esc(versionResult)+'</div>':'')+
+    '<small>Подсвечены поля, которые изменились по сравнению с предыдущей версией.</small>';
+}
+/* Кабина: ручной подход к причалу */
+let approach=null;
+const corridorX=d=>50+16*Math.sin(d/55);
+const corridorHalf=d=>7+15*Math.min(1,d/300);
+function approachBody(){
+  return p(C.docking.intro)+
+    '<div class="approach"><svg id="approach-svg" viewBox="0 0 100 150" aria-label="Коридор подхода">'+
+      '<path id="ap-left" class="ap-edge"/><path id="ap-right" class="ap-edge"/><path id="ap-center" class="ap-center"/>'+
+      '<rect id="ap-dock" x="30" y="-10" width="40" height="5" class="ap-dock"/>'+
+      '<path id="ap-ship" d="M0 -7 L5 5 L0 2 L-5 5 Z" class="ap-ship"/></svg>'+
+      '<div class="ap-hud"><div>До причала <b id="ap-dist">220 м</b></div><div>Скорость <b id="ap-speed">12 м/с</b></div><div class="ap-hint" id="ap-hint"></div></div></div>'+
+    '<div class="actions"><button type="button" class="btn primary ap-brake" id="ap-brake">Тормоз (удерживать)</button>'+btn('approach-handover','','Передать управление Маре')+'</div>';
+}
+function startApproach(){
+  if(approach?.raf)return;
+  if(!approach)approach={d:220,v:12,x:50,target:50,drift:0,braking:false,outside:0,last:performance.now(),raf:0,done:false,hintAt:0};
+  const svg=document.getElementById('approach-svg');
+  const brake=document.getElementById('ap-brake');
+  if(!svg||!brake)return;
+  const setTarget=e=>{const r=svg.getBoundingClientRect();approach.target=Math.max(4,Math.min(96,(e.clientX-r.left)/r.width*100));};
+  svg.addEventListener('pointerdown',e=>{sfx.wake();svg.setPointerCapture?.(e.pointerId);setTarget(e);e.preventDefault();});
+  svg.addEventListener('pointermove',e=>{if(e.buttons||e.pointerType==='touch')setTarget(e);});
+  const on=e=>{sfx.wake();approach.braking=true;e.preventDefault();};const off=()=>{if(approach)approach.braking=false;};
+  brake.addEventListener('pointerdown',on);brake.addEventListener('pointerup',off);brake.addEventListener('pointerleave',off);brake.addEventListener('pointercancel',off);
+  const frame=now=>{
+    if(!approach||approach.done)return;
+    const dt=Math.min(.05,(now-approach.last)/1000);approach.last=now;
+    const A=approach;
+    A.v=Math.max(1,A.v+(A.braking?-6:1.4)*dt);
+    A.d=Math.max(0,A.d-A.v*dt);
+    A.drift+=(Math.random()-.5)*14*dt;A.drift*=.985;
+    A.x+=((A.target-A.x)*2.2+A.drift)*dt;
+    const cx=corridorX(A.d),hw=corridorHalf(A.d);
+    const off=A.x-cx;
+    A.outside=Math.abs(off)>hw?A.outside+dt:0;
+    drawApproach(A,cx,hw,off);
+    if(A.outside>.9){finishApproach('assisted');return;}
+    if(A.d<=0){finishApproach(A.v<=3&&Math.abs(off)<=hw?'clean':'assisted');return;}
+    A.raf=requestAnimationFrame(frame);
+  };
+  approach.last=performance.now();
+  approach.raf=requestAnimationFrame(frame);
+}
+function drawApproach(A,cx,hw,off){
+  const pts=side=>{let d='';for(let y=150;y>=0;y-=6){const dist=A.d+(135-y)*1.2;const c=corridorX(Math.max(0,dist)),h=corridorHalf(Math.max(0,dist));d+=(d?'L':'M')+(c+side*h).toFixed(1)+' '+y;}return d;};
+  const center=()=>{let d='';for(let y=150;y>=0;y-=6){const dist=A.d+(135-y)*1.2;d+=(d?'L':'M')+corridorX(Math.max(0,dist)).toFixed(1)+' '+y;}return d;};
+  const set=(id,attr,val)=>document.getElementById(id)?.setAttribute(attr,val);
+  set('ap-left','d',pts(-1));set('ap-right','d',pts(1));set('ap-center','d',center());
+  const dockY=135-A.d/1.2;
+  set('ap-dock','y',(dockY-5).toFixed(1));set('ap-dock','x',(corridorX(0)-20).toFixed(1));
+  set('ap-ship','transform','translate('+A.x.toFixed(1)+' 135)');
+  const ship=document.getElementById('ap-ship');if(ship)ship.classList.toggle('warn',Math.abs(off)>hw*.75);
+  const dist=document.getElementById('ap-dist');if(dist)dist.textContent=Math.round(A.d)+' м';
+  const sp=document.getElementById('ap-speed');if(sp){sp.textContent=A.v.toFixed(1)+' м/с';sp.className=A.v<=3?'ok':A.v>8?'bad':'';}
+  const now=performance.now();
+  if(state.trust.mara>=1&&now-A.hintAt>1400){
+    A.hintAt=now;
+    const H=C.docking.hints;
+    const hint=Math.abs(off)>hw*.6?(off>0?H.left:H.right):(A.d<120&&A.v>4?H.slow:H.good);
+    const el=document.getElementById('ap-hint');if(el)el.textContent=hint;
+  }
+}
+function stopApproach(){if(approach?.raf){cancelAnimationFrame(approach.raf);approach.raf=0;}}
+function finishApproach(style){
+  if(!approach||approach.done)return;
+  approach.done=true;stopApproach();approach=null;
+  if(style==='clean'){sfx.open();haptic(true,[40,60,40,60,120]);}else{sfx.fail();haptic(true,[150,80,150]);}
+  run('dock',style);
+}
 function paintPanel() {
   let title='';
   let body='';
@@ -377,22 +542,19 @@ function paintPanel() {
       if (state.lab) body=card('Калибровка подтверждена',p(C.documents.lab.text));
       else if (!state.sampleReady) body=propArt('lab')+p('Установите контрольную кассету, чтобы вывести сигнал.')+
         btn('use','sample','Установить кассету',{disabled:!state.inventory.includes('sample')});
-      else body='<div class="card lab-reference"><strong>Образец на корпусе кассеты</strong>'+plot(traces.baseline)+
-        '<p>Найдите совпадающий профиль на одном из трёх каналов.</p></div><div class="lab-traces">'+
-        E.labChannels.map((ch,index)=>'<button class="trace-card" data-act="calibrate" data-value="'+ch+'">'+
-          '<span>Канал '+(index+1)+'</span>'+plot(traces[ch])+'</button>').join('')+'</div>';
+      else body=labBody();
       break;
     }
     case 'analysis':
       title='Пост аналитика';
-      body=state.task?.done?card(C.documents.analysis.title,p(C.documents.analysis.text)):
+      body=state.task?.done?card(C.documents.analysis.title,p(C.documents.analysis.text))+(state.versions?card(C.documents.versions.title,'<p class="sheet">'+esc(C.documents.versions.text)+'</p>'):versionsBody()):
         state.task?p('Ирена сверяет маршрут запроса. Осталось действий: '+Math.max(0,state.task.due-state.tick)+'. Перемещение и другие значимые действия продвигают время.'):
         p('Сопоставьте две ведомости в кабинете, затем поручите Ирене найти источник записи.')+btn('assign','','Поручить проверку',{disabled:!state.deduction});
       if (state.task&&!state.task.done) body+=btn('wait','','Подождать');
       break;
     case 'reader':
       title='Шлюзовой считыватель';
-      body=propArt('reader')+(state.reader?p('Бортовой допуск подтверждён.'):p('Предъявите служебный идентификатор.')+btn('use','badge','Предъявить идентификатор',{disabled:!state.inventory.includes('badge')}));
+      body=propArt('reader')+(state.reader?p('Бортовой допуск подтверждён.'):!state.inventory.includes('badge')?p('Нужен служебный идентификатор из кабинета.'):readerBody());
       break;
     case 'equipment':
       title='Стойка снаряжения';
@@ -408,8 +570,18 @@ function paintPanel() {
       body=card('Готовность',[
         [state.accepted,'Приказ принят'],[state.nav,'Маршрут задан'],[state.reader,'Служебный пропуск предъявлен'],
         [state.lab,'Сканер откалиброван'],[state.task?.done,'Проверка Иреной завершена']
-      ].map(([ok,label])=>p((ok?'✓ ':'○ ')+label)).join(''))+btn('dock','','Стыковаться',{disabled:!E.dockReady(state),primary:true})+
+      ].map(([ok,label])=>p((ok?'✓ ':'○ ')+label)).join(''))+btn('panel','approach','Начать подход',{disabled:!E.dockReady(state)||state.room!=='cockpit',primary:true})+
       (state.task&&!state.task.done?btn('wait','','Дождаться результата'):'');
+      break;
+    case 'evacuation':
+      title='Порядок эвакуации';
+      body=state.priority?card('Приоритет: '+C.evacuation.options[state.priority].label,p(C.evacuation.reply[state.priority])):
+        p('Рейн: «'+C.evacuation.question+'»')+'<div class="reply-choices">'+Object.keys(C.evacuation.options).map(id=>
+          '<button type="button" class="btn reply-choice" data-act="priority" data-value="'+id+'"><strong>'+esc(C.evacuation.options[id].label)+'</strong><span>'+esc(C.evacuation.options[id].note)+'</span></button>').join('')+'</div>';
+      break;
+    case 'approach':
+      title='Подход к причалу';
+      body=approachBody();
       break;
     case 'ship': {
       title='План шаттла';
@@ -453,8 +625,10 @@ function paintPanel() {
   }
   dialog.innerHTML='<div class="panel-top"><header class="panel-head"><h2 id="panel-title">'+esc(title)+'</h2>'+btn('close','','Закрыть')+'</header><div id="panel-feedback" role="status"></div></div><div class="panel-body">'+body+'</div>';
   if(activePanel==='desk')requestAnimationFrame(drawLines);
+  if(activePanel==='reader'&&!state.reader)startReader();else stopReader();
+  if(activePanel==='approach')startApproach();else stopApproach();
 }
-dialog.addEventListener('close',()=>{activePanel='';});
+dialog.addEventListener('close',()=>{activePanel='';stopReader();stopApproach();});
 document.addEventListener('click',event=>{
   const control=event.target.closest('[data-act]');
   if(!control) return;
@@ -487,6 +661,24 @@ document.addEventListener('click',event=>{
     return;
   }
   if(act==='dial-reset'){dialEntered=[];paintPanel();return;}
+  if(act==='lab-fix'){
+    sfx.wake();
+    const ok=labMatch()>=90;
+    const result=run('calibrate',ok?'baseline':'noise');
+    if(result.ok){sfx.open();haptic(true,[40,60,40]);}else{sfx.fail();haptic(true,[90,50,90]);labResult=result.message;paintPanel();}
+    return;
+  }
+  if(act==='reader-tap'){sfx.wake();readerTap();return;}
+  if(act==='version-pick'){
+    sfx.wake();
+    const [v,field]=value.split('|');
+    const result=run('versions',{version:Number(v),field});
+    if(result.ok){sfx.open();haptic(true,[40,60,40]);versionResult='';}else{sfx.fail();haptic(true,[90,50,90]);versionResult=result.message;paintPanel();}
+    return;
+  }
+  if(act==='approach-handover'){finishApproach('assisted');return;}
+  if(act==='use'&&value==='badge'&&state.room==='airlock'&&!state.reader){openPanel('reader');return;}
+  if(act==='show'||act==='priority')sfx.wake();
   if(act==='close'){closePanel();return;}
   if(act==='speech-next'){speechPage++;render();return;}
   if(act==='dismiss-thought'){thoughtOpen=false;render();return;}
@@ -494,7 +686,7 @@ document.addEventListener('click',event=>{
   if(act==='restart'){
     if(!window.confirm('Начать пролог заново? Автосохранение будет сброшено, ручное сохранение останется.'))return;
     state=E.fresh();
-    speechPage=0;thoughtOpen=false;links=[];pendingLink=null;pickFrom=null;dialEntered=[];dialRot=0;documentId='';
+    speechPage=0;thoughtOpen=false;links=[];pendingLink=null;pickFrom=null;dialEntered=[];dialRot=0;documentId='';labResult='';versionResult='';
     closePanel();persist();render();notify('Пролог начат заново.');
     return;
   }
