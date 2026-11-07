@@ -66,7 +66,7 @@ function render() {
     const frame=end?{title:'Стыковка завершена',text:'Шлюз станции принял захваты. У вас есть приказ, рабочая версия и материалы экипажа. Первое дело начнётся за этой дверью.'}:C.intro[state.intro];
     app.innerHTML='<main class="game">'+head+'<section class="scene intro" style="--art:url(assets/'+(end?'dock':'intro-'+state.intro)+'.webp)"><div class="intro-copy"><div class="kicker">'+
       (end?'Конец пролога':'Пролог · '+(state.intro+1)+' / '+C.intro.length)+'</div><h1>'+esc(frame.title)+'</h1>'+p(frame.text)+'<div class="actions">'+
-      (end?btn('panel','system','Сохранения')+'<a class="btn-link" href="../">К тестовой версии</a>':
+      (end?btn('restart','','Начать пролог заново',{primary:true})+btn('panel','system','Сохранения')+'<a class="btn-link" href="../">К тестовой версии</a>':
         btn('next-intro','',state.intro===C.intro.length-1?'Вступить в командование':'Продолжить →',{primary:true}))+'</div></div></section></main>';
     return;
   }
@@ -94,7 +94,7 @@ function render() {
   const hud=[['hero','Герой'],['inventory','Инвентарь'],['journal','Журнал'],['map','Карта'],['ship','Шаттл'],['system','Меню']]
     .map(([id,label])=>btn('panel',id,label)).join('');
   const sceneArt=crewId ? 'scene-'+state.room : 'room-'+state.room;
-  app.innerHTML='<main class="game">'+head+'<section class="scene '+(crew?'scene-speaking':'')+'" aria-label="'+esc(room.name)+'" style="--art:url(assets/'+sceneArt+'.webp)">'+
+  app.innerHTML='<main class="game">'+head+'<section class="scene '+(crew?'scene-speaking ':'')+(crewId?'has-crew':'')+'" aria-label="'+esc(room.name)+'" style="--art:url(assets/'+sceneArt+'.webp)">'+
     '<header><div class="kicker">Шаттл · '+esc(period)+'</div><h1>'+esc(room.name)+'</h1></header>'+
     (crew?'':hotspots+(crewId?actor(crewId):''))+
     conversation+thought+(crew?'':'<nav class="exits" aria-label="Двери">'+exits+'</nav>')+
@@ -222,12 +222,12 @@ function paintPanel() {
         card('Текущее задание',p(!state.accepted?'Примите приказ в кабинете.':!state.deduction?'Сопоставьте ведомости на рабочем столе.':!state.task?.done?'Поручите Ирене проверить источник и дождитесь результата.':'Завершите подготовку и подтвердите стыковку.'))+
         '<div class="actions">'+state.documents.map(id=>btn('read',id,C.documents[id].title)).join('')+'</div>'+
         (C.documents[documentId]?card(C.documents[documentId].title,'<p class="sheet">'+esc(C.documents[documentId].text)+'</p>'):'')+
-        (state.thoughts.length?card('Мысли инспектора',state.thoughts.map(entry=>C.rooms[entry]?.thought ?? thoughts[entry]).filter(Boolean).map(p).join('')):'');
+        (state.thoughts.length?card('Мысли командира',state.thoughts.map(entry=>C.rooms[entry]?.thought ?? thoughts[entry]).filter(Boolean).map(p).join('')):'');
       break;
     case 'system':
       title='Меню и сохранения';
       body=p(storageAvailable?'Прогресс сохраняется автоматически после игровых действий.':'Браузер ограничил доступ к сохранениям.')+
-        '<div class="actions">'+btn('save','','Сохранить вручную')+btn('load','','Загрузить ручное сохранение')+
+        '<div class="actions">'+btn('save','','Сохранить вручную')+btn('load','','Загрузить ручное сохранение')+btn('restart','','Начать заново')+
         '<a class="btn-link" href="../">К тестовой версии</a></div>';
       break;
   }
@@ -263,6 +263,13 @@ document.addEventListener('click',event=>{
   if(act==='speech-next'){speechPage++;render();return;}
   if(act==='dismiss-thought'){thoughtOpen=false;render();return;}
   if(act==='save'){notify(persist(manualKey)?'Ручное сохранение записано.':'Сохранение недоступно.');return;}
+  if(act==='restart'){
+    if(!window.confirm('Начать пролог заново? Автосохранение будет сброшено, ручное сохранение останется.'))return;
+    state=E.fresh();
+    speechPage=0;thoughtOpen=false;compare={same:'',different:''};compareSide='';compareField='';documentId='';
+    closePanel();persist();render();notify('Пролог начат заново.');
+    return;
+  }
   if(act==='load'){
     try {
       const raw=localStorage.getItem(manualKey);
