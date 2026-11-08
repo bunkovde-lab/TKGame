@@ -63,10 +63,10 @@ function render() {
   const head='<header class="top"><span class="brand">◈ TKGame · Мир Раскола</span><span class="top-title">Дела контрразведки / Пролог</span><small>'+esc(period)+'</small></header>';
   if (state.intro<C.intro.length || state.docked) {
     const end=state.docked;
-    const frame=end?{title:'Стыковка завершена',text:'Шлюз станции принял захваты. У вас есть приказ, рабочая версия и материалы экипажа. Первое дело начнётся за этой дверью.'}:C.intro[state.intro];
+    const frame=end?{title:'Стыковка завершена',text:'Шлюз станции принял захваты. У вас есть приказ, рабочая версия и материалы экипажа. За шлюзом — Лунный арбитраж. Две ведомости называют одну перевозку разными именами. Теперь нужно установить, что произошло с её пассажирами.'}:C.intro[state.intro];
     app.innerHTML='<main class="game">'+head+'<section class="scene intro" style="--art:url(assets/'+(end?'dock':'intro-'+state.intro)+'.webp)"><div class="intro-copy"><div class="kicker">'+
       (end?'Конец пролога':'Пролог · '+(state.intro+1)+' / '+C.intro.length)+'</div><h1>'+esc(frame.title)+'</h1>'+p(frame.text)+'<div class="actions">'+
-      (end?btn('restart','','Начать пролог заново',{primary:true})+btn('panel','system','Сохранения')+'<a class="btn-link" href="../">К тестовой версии</a>':
+      (end?btn('restart','','Начать пролог заново',{primary:true})+btn('panel','system','Сохранения')+'<a class="btn-link" href="../chapter/">Начать первое расследование →</a>':
         btn('next-intro','',state.intro===C.intro.length-1?'Вступить в командование':'Продолжить →',{primary:true}))+'</div></div></section></main>';
     return;
   }
@@ -228,7 +228,7 @@ function paintPanel() {
       title='Меню и сохранения';
       body=p(storageAvailable?'Прогресс сохраняется автоматически после игровых действий.':'Браузер ограничил доступ к сохранениям.')+
         '<div class="actions">'+btn('save','','Сохранить вручную')+btn('load','','Загрузить ручное сохранение')+btn('restart','','Начать заново')+
-        '<a class="btn-link" href="../">К тестовой версии</a></div>';
+        '<a class="btn-link" href="../chapter/">Начать первое расследование →</a></div>';
       break;
   }
   dialog.innerHTML='<header class="panel-head"><h2 id="panel-title">'+esc(title)+'</h2>'+btn('close','','Закрыть')+'</header><div id="panel-feedback" role="status"></div><div class="panel-body">'+body+'</div>';
