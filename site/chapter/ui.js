@@ -286,7 +286,7 @@
       .map((c) => {
         const speaking = state.activeNpc === c.id;
         const far = c.h < 18 ? ' far' : '';
-        return `<button type="button" class="crew-figure${speaking ? ' speaking' : ''}${far}" style="--x:${c.x}%;--y:${c.y}%;--h:${c.h}%;--light:${light}" data-a="talk" data-v="${c.id}" aria-label="Поговорить: ${esc(D.npcs[c.id].name)}, ${esc(c.note)}"${n || text ? ' tabindex="-1"' : ''}><img src="${abs(`../prologue/assets/crew-${c.id}.webp`)}" alt=""><span>${esc(shortName[c.id])}</span></button>`;
+        return `<button type="button" class="crew-figure${speaking ? ' speaking' : ''}${far}" style="--x:${c.x}%;--y:${c.y}%;--h:${(c.h * (D.crewStature?.[c.id]?.k || 1)).toFixed(1)}%;--ratio-fig:${D.crewStature?.[c.id]?.ratio || '150 / 435'};--light:${light}" data-a="talk" data-v="${c.id}" aria-label="Поговорить: ${esc(D.npcs[c.id].name)}, ${esc(c.note)}"${n || text ? ' tabindex="-1"' : ''}><img src="${abs(`../prologue/assets/crew-${c.id}.webp`)}" alt=""><span>${esc(shortName[c.id])}</span></button>`;
       })
       .join('');
     const spots = onShip
