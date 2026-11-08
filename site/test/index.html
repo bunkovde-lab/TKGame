@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Тестовые ссылки · Мир Раскола</title>
+<link rel="icon" href="../icons/icon.svg" type="image/svg+xml">
+<style>
+:root { color-scheme: dark; --ink: #f4ebdd; --muted: #b9b3ab; --gold: #e5b879; --edge: #b794634d; }
+body { margin: 0; background: #090e15; color: var(--ink); font: 16px/1.5 system-ui, sans-serif; }
+main { max-width: 42rem; margin: auto; padding: 1.5rem 16px 3rem; }
+h1 { font: 500 2rem Georgia, serif; margin: 0 0 .3rem; }
+h2 { font: 500 1.2rem Georgia, serif; color: var(--gold); margin: 1.6rem 0 .5rem; }
+p, li { color: var(--muted); }
+a.link { display: block; padding: .8rem 1rem; margin: .45rem 0; border: 1px solid var(--edge); border-radius: .6rem; background: #151c25; color: var(--ink); text-decoration: none; }
+a.link b { display: block; color: var(--gold); }
+a.link small { color: var(--muted); }
+button { font: inherit; padding: .7rem 1rem; border-radius: .6rem; border: 1px solid #c86; background: #2a1a17; color: var(--ink); width: 100%; }
+#ver { color: var(--gold); }
+</style>
+</head>
+<body>
+<main>
+<h1>Тестовые ссылки</h1>
+<p>Опубликованная версия: <span id="ver">—</span>. Если видите старую версию, обновите страницу через минуту: GitHub Pages обновляется до 10 минут.</p>
+
+<h2>Игра</h2>
+<a class="link" href="../"><b>Главное меню</b><small>Главная точка входа: продолжить, новая игра, главы, настройки, об игре</small></a>
+<a class="link" href="../prologue/?play=1"><b>Пролог «Приказ»</b><small>Продолжает сохранённый пролог или начинает новый</small></a>
+<a class="link" href="../chapter/"><b>Глава I «Семь имён»</b><small>Без пролога сначала спросит предысторию</small></a>
+<a class="link" href="../chapter/?prequel=1"><b>Глава I · выбрать предысторию заново</b><small>Открывает экран выбора, как прошёл пролог</small></a>
+<a class="link" href="../legacy/"><b>Старая реконструкция «Лишний в списке»</b><small>Больше не в меню, оставлена для истории</small></a>
+
+<h2>Что проверить</h2>
+<ul>
+<li>На телефоне: «Поделиться» → «На экран „Домой“» (iPhone) или «Установить приложение» (Android). Игра должна открыться на весь экран с иконкой.</li>
+<li>После первой загрузки включить авиарежим и открыть игру: меню, пролог и глава работают без сети.</li>
+<li>Пройти пролог до конца → «Начать главу I» → итоги пролога переносятся в главу.</li>
+<li>В меню главы «Главное меню» возвращает в общее меню, а там «Продолжить · Глава I».</li>
+<li>Превью ссылки в Telegram/WhatsApp: картинка и название «Мир Раскола».</li>
+</ul>
+
+<h2>Сброс</h2>
+<p>Стирает прогресс пролога и главы на этом устройстве. Настройки и ручные сохранения остаются.</p>
+<button type="button" id="reset">Стереть прогресс</button>
+</main>
+<script>
+fetch('../version.txt', { cache: 'no-store' }).then(r => r.ok ? r.text() : '').then(t => { if (t.trim()) document.querySelector('#ver').textContent = t.trim(); }).catch(() => {});
+document.querySelector('#reset').addEventListener('click', () => {
+  if (!confirm('Стереть прогресс пролога и главы?')) return;
+  try { ['tkgame-prologue-auto-v2', 'tkgame-prologue-outcome', 'tkgame-chapter1-auto-v1', 'tkgame-last-played'].forEach(k => localStorage.removeItem(k)); sessionStorage.clear(); } catch (e) {}
+  document.querySelector('#reset').textContent = 'Прогресс стёрт';
+});
+</script>
+</body>
+</html>

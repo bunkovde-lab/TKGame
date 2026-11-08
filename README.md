@@ -1,4 +1,34 @@
-# TKGame — платформа браузерных игр
+# Мир Раскола
+
+Детективная история о контрразведке Багряных домов: пролог «Приказ» и глава I «Семь имён». Работает в браузере на телефоне и ПК, ставится на главный экран как приложение (PWA) и играется без сети.
+
+Адрес: https://bunkovde-lab.github.io/TKGame/ · тестовые ссылки: https://bunkovde-lab.github.io/TKGame/test/
+
+## Устройство сайта
+
+- `site/index.html`, `hub.js`, `hub.css` — главное меню: продолжить, новая игра, главы, настройки, об игре и титры.
+- `site/prologue/` — пролог «Приказ». Открывается из меню с `?play=1`; без параметра возвращает в меню.
+- `site/chapter/` — глава I «Семь имён». Берёт итоги пролога из `localStorage` (`tkgame-prologue-outcome`).
+- `site/manifest.webmanifest`, `site/sw.js`, `site/icons/` — установка на телефон и офлайн. Список файлов в `sw.js` пересобирает `node tools/sw-assets.mjs` (при деплое — автоматически, с версией коммита).
+- `site/test/` — страница тестовых ссылок и сброса прогресса.
+- `site/legacy/` — старая реконструкция «Лишний в списке», в меню не показывается.
+- `docs/release-art.md` — какие арты нужны к релизу и куда их класть.
+
+## Проверки
+
+```
+node tests/prologue.mjs
+node tests/chapter.mjs
+node tests/chapter-ui.mjs
+node tests/chapter-prior.mjs
+node tests/chapter-crew.mjs
+```
+
+Деплой: `.github/workflows/deploy-pages.yml` публикует `site/` на GitHub Pages при изменениях в `main`.
+
+---
+
+## Архив: реконструкция «Лишний в списке»
 
 Первая играбельная реконструкция детективной игры **«Лишний в списке»**.
 
@@ -16,7 +46,7 @@
 
 ## Запуск
 
-Откройте `site/index.html` в браузере. Для хостинга укажите каталог `site/` как корень статического сайта. Отсутствуют внешние зависимости.
+Откройте `site/legacy/index.html` в браузере. Для хостинга укажите каталог `site/` как корень статического сайта. Отсутствуют внешние зависимости.
 
 Для GitHub Pages настройте **Settings → Pages → Build and deployment → GitHub Actions**. Рабочий процесс `.github/workflows/deploy-pages.yml` автоматически публикует `site/` при изменениях в `main`.
 

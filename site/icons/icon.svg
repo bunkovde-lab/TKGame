@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Временная иконка: заменить на арт из списка docs/release-art.md -->
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="38%" r="70%"><stop offset="0" stop-color="#1f2b38"/><stop offset="1" stop-color="#090e15"/></radialGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff3dc"/><stop offset="1" stop-color="#e5b879"/></linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="0" fill="url(#bg)"/>
+  <g fill="none" stroke="url(#gold)" stroke-width="18" stroke-linejoin="round">
+    <path d="M256 92 420 256 256 420 92 256Z"/>
+  </g>
+  <path d="M256 168 344 256 256 344 168 256Z" fill="url(#gold)"/>
+  <path d="M244 150 L268 150 L262 362 L250 362Z" fill="#090e15" transform="rotate(18 256 256)"/>
+</svg>

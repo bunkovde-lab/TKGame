@@ -49,7 +49,9 @@ const icons={
   clock:'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0-13v4l3 2'
 };
 const ico=id=>'<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="'+icons[id]+'"/></svg>';
-let titleOpen=true;
+/* Главное меню общее для игры (../). Сюда приходят с ?play=1 */
+let titleOpen=!/[?&]play=1/.test(location.search);
+try{localStorage.setItem('tkgame-last-played','prologue');}catch{}
 let roomCard=false;
 /* Эффекты окружения: свет, индикаторы, блики окон. Координаты в процентах арта. */
 const fxMap={
@@ -452,13 +454,6 @@ function saveOutcome(){
     caught:[...state.caught],secrets:E.crewIds.filter(id=>state.pulse[id]==='revealed')};
   try{localStorage.setItem('tkgame-prologue-outcome',JSON.stringify(outcome));}catch{}
 }
-function renderTitle(){
-  const canContinue=state.intro>0;
-  app.innerHTML='<main class="game title-screen"><section class="scene intro title'+sceneEnter('title')+'" style="--art:url(assets/intro-0.webp)"><div class="scene-art kb">'+fxLayer('intro-0')+'</div><canvas class="dust-fx" aria-hidden="true"></canvas><div class="bars" aria-hidden="true"><i></i><i></i></div><div class="dust" aria-hidden="true">'+'<i></i>'.repeat(16)+'</div>'+
-    '<div class="title-copy"><div class="kicker">Дела контрразведки Багряных домов</div><h1 class="logo">Мир Раскола</h1><p class="subtitle">Пролог · «Приказ»</p><div class="title-menu">'+
-    (canContinue?btn('title-continue','','Продолжить',{primary:true}):'')+btn('title-new','',canContinue?'Новая игра':'Начать с пролога',{primary:!canContinue})+'<a class="btn" href="../chapter/">Сразу к главе I</a>'+btn('panel','settings','Настройки')+
-    '</div><small class="title-foot">Автосохранение включено · Лучше играть со звуком</small></div></section></main>';
-}
 function settingsBody(){
   const seg=(act,value,label,on)=>'<button type="button" class="seg'+(on?' on':'')+'" data-act="'+act+'" data-value="'+value+'" aria-pressed="'+on+'">'+esc(label)+'</button>';
   return '<div class="settings">'+
@@ -511,7 +506,7 @@ function actor(crewId) {
   return '<button class="embedded-actor" data-act="talk" data-value="'+crewId+'" aria-label="Поговорить: '+esc(crew.name)+'"><span>'+esc(crew.name)+'</span></button>';
 }
 function render() {
-  if(titleOpen){renderTitle();startTyping();return;}
+  if(titleOpen){location.replace('../');return;}
   if (state.docked) {renderEnding();return;}
   if (state.intro<C.intro.length) {
     const end=state.docked;
@@ -521,7 +516,7 @@ function render() {
     const key=end?'end':'intro-'+state.intro;
     app.innerHTML='<main class="game">'+topBar(false)+'<section class="scene intro typing-host'+sceneEnter(key)+'" style="--art:url(assets/'+(end?'dock':'intro-'+state.intro)+'.webp)"><div class="scene-art kb">'+fxLayer(end?'dock':'intro-'+state.intro)+'</div><canvas class="dust-fx" aria-hidden="true"></canvas><div class="bars" aria-hidden="true"><i></i><i></i></div><div class="intro-copy"><div class="kicker">'+
       (end?'Конец пролога':'Пролог · '+(state.intro+1)+' / '+C.intro.length)+'</div><h1>'+esc(frame.title)+'</h1>'+tw(frame.text,key,'narrator')+'<div class="after-type">'+crewSummary+'<div class="actions">'+
-      (end?btn('restart','','Начать пролог заново',{primary:true})+btn('title-menu','','Главное меню')+'<a class="btn-link" href="../">К тестовой версии</a>':
+      (end?btn('restart','','Начать пролог заново',{primary:true})+btn('title-menu','','Главное меню'):
         btn('next-intro','',state.intro===C.intro.length-1?'Вступить в командование':'Продолжить ▸',{primary:true}))+'</div></div>'+
       (end?'':'<div class="progress-dots" aria-hidden="true">'+C.intro.map((_,i)=>'<i class="'+(i<=state.intro?'on':'')+'"></i>').join('')+'</div>')+'</div></section></main>';
     lastCrew=null;
@@ -1280,9 +1275,7 @@ document.addEventListener('click',event=>{
   if(!control) return;
   let {act,value}=control.dataset;
   if(act!=='close'&&!control.closest('.dial, .desk-board'))sfx.click(false);
-  if(act==='title-continue'){titleOpen=false;render();return;}
-  if(act==='title-new'){if(state.intro>0){openPanel('confirm-new');return;}titleOpen=false;render();return;}
-  if(act==='title-menu'){closePanel();titleOpen=true;render();return;}
+  if(act==='title-menu'){closePanel();location.href='../';return;}
   if(act==='set-sound'){settings.sound=value==='1';saveSettings();if(settings.sound){sfx.wake();sfx.click(true);}sfx.ambient(ambientWanted);paintPanel();return;}
   if(act==='set-vibro'){settings.vibro=value==='1';saveSettings();haptic(true,40);paintPanel();return;}
   if(act==='set-speed'){settings.speed=value;saveSettings();paintPanel();return;}

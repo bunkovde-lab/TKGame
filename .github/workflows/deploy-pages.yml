@@ -10,6 +10,7 @@ on:
       - "assets/**"
       - "games/**"
       - "site/**"
+      - "tools/**"
       - "package.json"
       - "package-lock.json"
       - "vite.config.*"
@@ -65,6 +66,7 @@ jobs:
           find "$PUBLISH_DIR" -name index.html -print0 | xargs -0 -r sed -i -E "s/\?v=[A-Za-z0-9]+\"/?v=${GITHUB_SHA::7}\"/g"
           find "$PUBLISH_DIR" -name index.html -print0 | xargs -0 -r sed -i -E "s/'v=[A-Za-z0-9]+'/'v=${GITHUB_SHA::7}'/g"
           for dir in $(find "$PUBLISH_DIR" -name index.html -exec dirname {} \;); do printf '%s' "${GITHUB_SHA::7}" > "$dir/version.txt"; done
+          if [ -f "$PUBLISH_DIR/sw.js" ] && [ -f tools/sw-assets.mjs ]; then node tools/sw-assets.mjs "${GITHUB_SHA::7}"; fi
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

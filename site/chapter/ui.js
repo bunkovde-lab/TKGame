@@ -25,6 +25,7 @@
   const actorX = { port: 70, waiting: 85, registry: 78, clinic: 78, warehouse: 78, archive: 78, relay: 78 };
   let lastSceneKey = '',
     lastNpc = null;
+  try { localStorage.setItem('tkgame-last-played', 'chapter'); } catch {}
   const AUTO = 'tkgame-chapter1-auto-v1',
     MANUAL = 'tkgame-chapter1-manual-v1';
   const esc = (s) =>
@@ -458,7 +459,7 @@
     const e = D.endings?.[state.ending] || { title: 'Заключение', text: 'Ваше решение передано в Центр.' };
     const ep = pages(state.endingPassage || e.text),
       i = Math.min(endingPage, ep.length - 1);
-    return `<section class="ending"><div class="kicker">Дело LN-407 · Итог · ${i + 1} / ${ep.length}</div><h1>${esc(e.title)}</h1><p>${rich(ep[i])}</p><p class="muted">${state.evidence.length} материалов · ${state.conclusions.length} выводов · ${state.sanction ? 'санкция получена' : 'без специальной санкции'}. Решения и состояние дела сохранены.</p><div class="actions">${i > 0 ? b('ending-prev', '', '◂ Назад') : ''}${i < ep.length - 1 ? b('ending-next', '', 'Продолжить →', true) : ''}${b('panel', 'journal', 'Материалы')}${b('panel', 'system', 'Сохранения')}<a class="btn" href="../prologue/">Главное меню</a></div></section>`;
+    return `<section class="ending"><div class="kicker">Дело LN-407 · Итог · ${i + 1} / ${ep.length}</div><h1>${esc(e.title)}</h1><p>${rich(ep[i])}</p><p class="muted">${state.evidence.length} материалов · ${state.conclusions.length} выводов · ${state.sanction ? 'санкция получена' : 'без специальной санкции'}. Решения и состояние дела сохранены.</p><div class="actions">${i > 0 ? b('ending-prev', '', '◂ Назад') : ''}${i < ep.length - 1 ? b('ending-next', '', 'Продолжить →', true) : ''}${b('panel', 'journal', 'Материалы')}${b('panel', 'system', 'Сохранения')}<a class="btn" href="../">Главное меню</a></div></section>`;
   }
 
   function workbench(p) {
@@ -791,7 +792,7 @@
         break;
       case 'system':
         title = 'Меню';
-        body = `<div class="menu-list">${b('close', '', 'Продолжить игру', true)}${b('save', '', 'Сохранить вручную')}${b('load', '', 'Загрузить ручное сохранение')}${b('panel', 'puzzles', 'Лаборатория')}${b('journal-tab', 'lore', 'Термины мира')}<a href="?prequel=1" class="btn">Изменить предысторию</a>${b('new-confirm', '', 'Начать главу заново')}<a href="../prologue/" class="btn">Главное меню · Пролог</a></div><h3>Сложность</h3><div class="seg">${[['family', 'Для семьи'], ['normal', 'Обычная'], ['detective', 'Следователь']].map(([m, l]) => `<button type="button" class="btn${(state.mode || 'normal') === m ? ' primary' : ''}" data-a="set-mode" data-v="${m}" aria-pressed="${(state.mode || 'normal') === m}">${l}</button>`).join('')}</div><p class="muted">${esc({ family: 'Подсказки на доске улик, Восс читается сразу, меньше давления.', normal: 'Подсказки только по запросу.', detective: 'Без счётчика нитей, Восс держится дольше, ошибочная версия стоит 20 минут.' }[state.mode || 'normal'])}</p>${FX ? '<h3>Настройки</h3>' + FX.settingsBody() : ''}<small class="muted">Прогресс сохраняется автоматически после каждого действия. Настройки общие с прологом.</small>`;
+        body = `<div class="menu-list">${b('close', '', 'Продолжить игру', true)}${b('save', '', 'Сохранить вручную')}${b('load', '', 'Загрузить ручное сохранение')}${b('panel', 'puzzles', 'Лаборатория')}${b('journal-tab', 'lore', 'Термины мира')}<a href="?prequel=1" class="btn">Изменить предысторию</a>${b('new-confirm', '', 'Начать главу заново')}<a href="../" class="btn">Главное меню</a></div><h3>Сложность</h3><div class="seg">${[['family', 'Для семьи'], ['normal', 'Обычная'], ['detective', 'Следователь']].map(([m, l]) => `<button type="button" class="btn${(state.mode || 'normal') === m ? ' primary' : ''}" data-a="set-mode" data-v="${m}" aria-pressed="${(state.mode || 'normal') === m}">${l}</button>`).join('')}</div><p class="muted">${esc({ family: 'Подсказки на доске улик, Восс читается сразу, меньше давления.', normal: 'Подсказки только по запросу.', detective: 'Без счётчика нитей, Восс держится дольше, ошибочная версия стоит 20 минут.' }[state.mode || 'normal'])}</p>${FX ? '<h3>Настройки</h3>' + FX.settingsBody() : ''}<small class="muted">Прогресс сохраняется автоматически после каждого действия. Настройки общие с прологом.</small>`;
         break;
       case 'dismiss-confirm':
         title = 'Закрыть дело без доказанного обвинения?';
