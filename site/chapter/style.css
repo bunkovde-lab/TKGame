@@ -193,7 +193,7 @@ button.card:active { transform: scale(.98); }
 .board-claim small { font-size: .62rem; letter-spacing: .12em; text-transform: uppercase; color: #7a6650; }
 .board-claim b { font: 600 1rem/1.25 Georgia, serif; }
 .board-claim span { font-size: .74rem; color: #6a5a46; }
-.board-pins { display: grid; grid-template-columns: repeat(auto-fill, minmax(6.4rem, 1fr)); gap: .7rem .5rem; }
+.board-pins { display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: .8rem .6rem; }
 .pin { position: relative; display: grid; gap: .25rem; padding: .3rem .3rem .4rem; background: #e9e1cf; color: #2a241c; border: 0; border-radius: .15rem; transform: rotate(var(--r, 0deg)); box-shadow: 0 .3rem .6rem #0009; cursor: pointer; font-size: .68rem; line-height: 1.2; text-align: center; transition: transform .2s, box-shadow .2s; }
 .pin img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: .1rem; filter: sepia(.25); }
 .pin i { position: absolute; top: -.3rem; left: 50%; width: .6rem; height: .6rem; margin-left: -.3rem; border-radius: 50%; background: #8a7a62; box-shadow: 0 1px 2px #000a; }
@@ -228,3 +228,23 @@ button.card:active { transform: scale(.98); }
 .lens-strip.pulse { background: #1d0e10cc; border: 1px solid #ff6b6b44; color: #ffd9d9; }
 .lens-strip.pulse b { color: #ff6b6b; animation: own-pulse .9s ease-in-out infinite; }
 .duel-claim + .lens-strip { margin: .4rem 0; }
+
+/* Доска: звенья версии и карточки-факты */
+.link-slots { position: relative; z-index: 3; display: grid; gap: .4rem; margin: 0 auto .6rem; max-width: 30rem; }
+.link-slot { display: grid; gap: .1rem; text-align: left; padding: .45rem .6rem; background: #1a140ecc; color: #efe6d2; border: 1px dashed #a88a5e; border-radius: .3rem; cursor: pointer; }
+.link-slot small { font-size: .6rem; letter-spacing: .1em; text-transform: uppercase; color: #b89b70; }
+.link-slot b { font: 600 .92rem/1.25 Georgia, serif; }
+.link-slot span { font-size: .78rem; color: #b8a88f; }
+.link-slot.active { border: 1px solid var(--gold); box-shadow: 0 0 0 2px #e5b87944; }
+.link-slot.filled { border-style: solid; border-color: #c4383a; background: #2a1712cc; }
+.link-slot.filled span { color: #ffd9c9; }
+.link-slot.wrong { border-color: #ff6b6b; animation: slot-shake .4s; }
+@keyframes slot-shake { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+.board-guide { position: relative; z-index: 3; margin: 0 auto .7rem; max-width: 30rem; font-size: .76rem; color: #d9c7a6; text-align: center; }
+.pin { display: grid; gap: .3rem; padding: .5rem .55rem .45rem; text-align: left; cursor: default; }
+.pin-main { display: grid; gap: .2rem; padding: 0; border: 0; background: none; color: inherit; text-align: left; cursor: pointer; }
+.pin-main small { font-size: .58rem; letter-spacing: .08em; text-transform: uppercase; color: #8a7458; }
+.pin-main b { font: 600 .86rem/1.2 Georgia, serif; }
+.pin-main span { font-size: .76rem; line-height: 1.35; color: #3d342a; }
+.pin-read { justify-self: start; padding: .15rem .45rem; font-size: .68rem; color: #6a4f2e; background: #0000; border: 1px solid #b89b7088; border-radius: .2rem; cursor: pointer; }
+.board-actions { position: sticky; bottom: 0; z-index: 4; padding: .5rem 0; background: linear-gradient(#0000, var(--panel-bg, #141c26) 35%); }

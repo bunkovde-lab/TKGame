@@ -163,6 +163,7 @@
     }, 4600);
   }
   function close() {
+    boardReturn = null;
     view = '';
     focus = '';
     selection = [];
@@ -179,6 +180,7 @@
     page = 0;
     if (v === 'puzzle') workStage = 0;
     if (v === 'game') gameVals = {};
+    if (v !== 'material' && v !== 'lore') boardReturn = null;
     paintPanel();
     FX?.panelOpened(panel, fresh);
     if (!panel.open) panel.showModal();
@@ -482,20 +484,40 @@
   }
   /* Доска улик: нити от материалов к версии. Неверная связка рвётся */
   let boardHint = '';
+  let boardSlots = [],
+    boardActive = 0,
+    boardWrong = [],
+    boardReturn = null;
+  function boardLinks(id) {
+    const c = D.conclusions[id];
+    return D.links?.[id] || c.requires.map((e, i) => [`Звено ${i + 1}`, e]);
+  }
   function boardBody(id) {
     const c = D.conclusions[id];
-    const need = c.requires.length;
+    const links = boardLinks(id);
+    if (boardSlots.length !== links.length) boardSlots = links.map(() => null);
     const mode = state.mode || 'normal';
-    const count = mode === 'detective' ? 'Сколько нитей нужно, решаете сами.' : `Нужно ${need} независимых материала.`;
+    const slots = links
+      .map(([q], i) => {
+        const e = boardSlots[i];
+        const cls = `${i === boardActive ? ' active' : ''}${e ? ' filled' : ''}${boardWrong.includes(i) ? ' wrong' : ''}`;
+        return `<button type="button" class="link-slot${cls}" data-a="board-slot" data-v="${i}" data-slot="${i}"><small>Звено ${i + 1}</small><b>${esc(q)}</b><span>${e ? '◆ ' + esc(materialLabel(e)) : i === boardActive ? 'Выберите факт ниже' : 'Пусто'}</span></button>`;
+      })
+      .join('');
     const pins = state.evidence
       .filter((e) => D.evidence[e])
       .map((e, i) => {
-        const tied = selection.includes(e);
+        const at = boardSlots.indexOf(e);
         const hint = boardHint === e ? ' hinted' : '';
-        return `<button type="button" class="pin${tied ? ' tied' : ''}${hint}" data-a="select-evidence" data-v="${esc(e)}" aria-pressed="${tied}" style="--r:${((i * 37) % 7) - 3}deg"><img src="assets/detail-${esc(D.evidence[e].detail || 'manifest')}.webp" alt=""><span>${esc(materialLabel(e))}</span><i aria-hidden="true"></i></button>`;
+        return `<div class="pin${at >= 0 ? ' tied' : ''}${hint}" data-pin="${esc(e)}" style="--r:${((i * 37) % 5) - 2}deg"><i aria-hidden="true"></i><button type="button" class="pin-main" data-a="board-pick" data-v="${esc(e)}" aria-pressed="${at >= 0}"><small>${esc(D.evidence[e].type || 'Материал')}${at >= 0 ? ` · звено ${at + 1}` : ''}</small><b>${esc(materialLabel(e))}</b><span>${esc(D.fact ? D.fact(e) : '')}</span></button><button type="button" class="pin-read" data-a="board-read" data-v="${esc(e)}">Читать целиком</button></div>`;
       })
       .join('');
-    return `<div class="board" id="board"><svg class="threads" aria-hidden="true"></svg><div class="board-claim" id="board-claim"><small>Версия</small><b>${esc(c.title)}</b><span>${selection.length} ${selection.length === 1 ? 'нить' : selection.length > 1 && selection.length < 5 ? 'нити' : 'нитей'} · ${esc(count)}</span></div><div class="board-pins">${pins}</div></div><p class="muted">Нажмите на материал, чтобы протянуть нить к версии. Показания сами по себе не заменяют проверку.</p><div class="actions">${b('submit-deduction', id, 'Проверить связку', true, !selection.length)}${b('board-clear', '', 'Снять нити')}${b('panel', 'deductions', 'Другие версии')}</div>`;
+    const guide =
+      mode === 'detective'
+        ? 'Ответьте на каждое звено фактом из дела.'
+        : 'Нажмите звено, затем факт, который на него отвечает. Нажмите заполненное звено, чтобы снять факт. «Читать целиком» откроет материал.';
+    const filled = boardSlots.filter(Boolean).length;
+    return `<div class="board" id="board"><svg class="threads" aria-hidden="true"></svg><div class="board-claim" id="board-claim"><small>Версия</small><b>${esc(c.title)}</b><span>${filled} из ${links.length} звеньев</span></div><div class="link-slots">${slots}</div><p class="board-guide">${esc(guide)}</p><div class="board-pins">${pins}</div></div><div class="actions board-actions">${b('submit-deduction', id, 'Проверить версию', true, filled !== links.length)}${b('board-clear', '', 'Снять все факты')}${b('panel', 'deductions', 'Другие версии')}</div>`;
   }
   function scrollPanelTop() {
     for (const el of [panel, panel.querySelector?.('.panel-body')]) if (el?.scrollTo) el.scrollTo({ top: 0, behavior: 'auto' });
@@ -503,20 +525,23 @@
   function drawThreads(snap = false) {
     const board = panel.querySelector?.('#board');
     if (!board || !board.getBoundingClientRect) return;
-    const svg = board.querySelector('.threads'),
-      claim = board.querySelector('#board-claim');
-    const br = board.getBoundingClientRect(),
-      cr = claim.getBoundingClientRect();
+    const svg = board.querySelector('.threads');
+    const br = board.getBoundingClientRect();
     svg.setAttribute('viewBox', `0 0 ${br.width} ${br.height}`);
-    const cx = cr.left - br.left + cr.width / 2,
-      cy = cr.top - br.top + cr.height;
-    svg.innerHTML = [...board.querySelectorAll('.pin.tied i')]
-      .map((pinEl) => {
-        const r = pinEl.getBoundingClientRect();
-        const x = r.left - br.left + r.width / 2,
-          y = r.top - br.top + r.height / 2;
-        const sag = Math.min(40, Math.abs(x - cx) * 0.15 + 12);
-        return `<path class="${snap ? 'snap' : ''}" d="M${x} ${y} Q${(x + cx) / 2} ${(y + cy) / 2 + sag} ${cx} ${cy}"/>`;
+    svg.innerHTML = boardSlots
+      .map((e, i) => {
+        if (!e) return '';
+        const slot = board.querySelector(`[data-slot="${i}"]`),
+          pin = board.querySelector(`[data-pin="${CSS.escape ? CSS.escape(e) : e}"] i`);
+        if (!slot || !pin) return '';
+        const sr = slot.getBoundingClientRect(),
+          pr = pin.getBoundingClientRect();
+        const x1 = pr.left - br.left + pr.width / 2,
+          y1 = pr.top - br.top + pr.height / 2;
+        const x2 = sr.left - br.left + sr.width - 10,
+          y2 = sr.top - br.top + sr.height / 2;
+        const bad = snap && (boardWrong.includes(i) || boardWrong.length === 0);
+        return `<path class="${bad ? 'snap' : ''}" d="M${x1} ${y1} Q${Math.max(x1, x2) + 30} ${(y1 + y2) / 2} ${x2} ${y2}"/>`;
       })
       .join('');
   }
@@ -595,7 +620,7 @@
               : /key|seal/.test(focus)
                 ? 'key'
                 : 'manifest');
-        body = `<div class="detail-layout"><img class="item-art" src="assets/detail-${esc(artId)}.webp" alt="${esc(title)}"><div><div class="kicker">${esc(e.type)} · ${esc(e.source)}</div><p class="document">${rich(ps[i])}</p><div class="actions">${i > 0 ? b('material-prev', '', '←') : ''}${i < ps.length - 1 ? b('material-next', '', 'Следующая страница →') : ''}<small>${i + 1} / ${ps.length}</small></div><p><em>${esc(e.thought || 'Прежде чем считать это фактом, нужно проверить независимый источник.')}</em></p></div></div>${b('panel', 'journal', 'Все материалы')}`;
+        body = `<div class="detail-layout"><img class="item-art" src="assets/detail-${esc(artId)}.webp" alt="${esc(title)}"><div><div class="kicker">${esc(e.type)} · ${esc(e.source)}</div><p class="document">${rich(ps[i])}</p><div class="actions">${i > 0 ? b('material-prev', '', '←') : ''}${i < ps.length - 1 ? b('material-next', '', 'Следующая страница →') : ''}<small>${i + 1} / ${ps.length}</small></div><p><em>${esc(e.thought || 'Прежде чем считать это фактом, нужно проверить независимый источник.')}</em></p></div></div>${boardReturn ? b('board-back', '', '◂ Вернуться к доске', true) : b('panel', 'journal', 'Все материалы')}`;
         break;
       }
       case 'deductions':
@@ -1138,6 +1163,12 @@
         paintPanel();
         break;
       case 'deduction':
+        if (v !== boardReturn) {
+          boardSlots = [];
+          boardActive = 0;
+          boardWrong = [];
+          boardHint = '';
+        }
         open('deductions', v);
         break;
       case 'select-evidence':
@@ -1145,10 +1176,12 @@
         paintPanel();
         break;
       case 'submit-deduction': {
-        const tried = [...selection];
+        const tried = boardSlots.filter(Boolean);
         if (!run('deduce', { id: v, evidence: tried }, { showPassage: false })) break;
         if (state.conclusions.includes(v)) {
           boardHint = '';
+          boardSlots = [];
+          boardWrong = [];
           const c = D.conclusions[v];
           close();
           speech = c.thought || c.text || c.title;
@@ -1156,20 +1189,64 @@
           page = 0;
           render();
         } else {
+          const need = D.conclusions[v].requires;
+          const wrong = boardSlots.map((e, i) => (e && !need.includes(e) ? i : -1)).filter((i) => i >= 0);
+          /* «Для семьи» показывает, какие звенья не держатся, и подсвечивает верный факт; обычный режим называет только число */
+          boardWrong = state.mode === 'family' ? wrong : [];
+          boardHint = state.mode === 'family' ? need.find((e) => state.evidence.includes(e) && !tried.includes(e)) || '' : '';
+          if (state.mode !== 'detective') notify(`Не держится звеньев: ${wrong.length || 'связка повторяет одно и то же'}.`);
+          paintPanel();
           scrollPanelTop();
-          setTimeout(() => drawThreads(true), 250);
-          /* В режиме «для семьи» после ошибки подсвечиваем один верный материал */
-          const right = D.conclusions[v].requires.filter((e) => state.evidence.includes(e));
-          boardHint = state.mode === 'family' ? right.find((e) => !tried.includes(e)) || right[0] || '' : '';
+          setTimeout(() => drawThreads(true), 120);
           setTimeout(() => {
-            selection = [];
+            boardSlots = boardSlots.map((e, i) => (wrong.includes(i) ? null : e));
+            if (state.mode !== 'family') boardSlots = boardSlots.map(() => null);
+            boardActive = Math.max(0, boardSlots.findIndex((e) => !e));
             if (view === 'deductions') paintPanel();
-          }, 1100);
+          }, 1200);
         }
         break;
       }
+      case 'board-slot': {
+        const i = Number(v);
+        if (boardSlots[i]) boardSlots[i] = null;
+        boardActive = i;
+        boardWrong = boardWrong.filter((x) => x !== i);
+        paintPanel();
+        break;
+      }
+      case 'board-pick': {
+        const at = boardSlots.indexOf(v);
+        if (at >= 0) {
+          boardSlots[at] = null;
+          boardActive = at;
+        } else {
+          boardSlots[boardActive] = v;
+          boardWrong = boardWrong.filter((x) => x !== boardActive);
+          const next = boardSlots.findIndex((e) => !e);
+          boardActive = next >= 0 ? next : boardActive;
+          FX?.sfx.click(true);
+        }
+        paintPanel();
+        break;
+      }
+      case 'board-read':
+        boardReturn = focus;
+        run('inspect', v, { showPassage: false });
+        open('material', v);
+        break;
+      case 'board-back': {
+        const f = boardReturn;
+        boardReturn = null;
+        view = 'deductions';
+        focus = f;
+        paintPanel();
+        break;
+      }
       case 'board-clear':
-        selection = [];
+        boardSlots = [];
+        boardActive = 0;
+        boardWrong = [];
         paintPanel();
         break;
       case 'submit-sanction':

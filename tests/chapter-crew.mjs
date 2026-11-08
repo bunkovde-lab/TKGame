@@ -164,7 +164,7 @@ click('panel','crew');assert.match(panel.innerHTML,/Личное 0\/2/);
 {
   const st2=ui.CHAPTER_ENGINE.restore(st());st2.location='office';st2.activeNpc=null;storage.set('tkgame-chapter1-auto-v1',JSON.stringify(st2));
   click('deduction','forgery');assert.match(panel.innerHTML,/class="board"/);assert.match(panel.innerHTML,/class="pin/);
-  click('select-evidence','manifest');assert.match(panel.innerHTML,/pin tied/);
+  assert.match(panel.innerHTML,/Когда подписан карантин/);click('board-pick','manifest');assert.match(panel.innerHTML,/pin tied/);assert.match(panel.innerHTML,/link-slot active/);click('board-pick','camera');click('board-pick','sedative');
   const t=st().tick;click('submit-deduction','forgery');assert.ok(st().tick>t);assert.ok(!st().conclusions.includes('forgery'));
   const s3=st();s3.location='registry';s3.conclusions.push('forgery');s3.evidence.push(...D.duel.claims.flatMap(c=>c.counters),'orderchain');s3.evidence=[...new Set(s3.evidence)];
   storage.set('tkgame-chapter1-auto-v1',JSON.stringify(s3));
