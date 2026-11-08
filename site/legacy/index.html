@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#111b22">
+  <meta name="robots" content="noindex">
+  <meta name="description" content="Лишний в списке — интерактивное расследование. Осматривайте места, сопоставляйте улики и решайте судьбу свидетеля.">
+  <title>Лишний в списке | TKGame</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script src="./game.js" defer></script>
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="brand"><span class="brand-glyph">TK</span><span class="brand-title">TKGAME <small>СЕКРЕТНОЕ ДЕЛО / 017</small></span></div>
+    <div class="case-title"><span class="eyebrow">ДЕТЕКТИВНОЕ РАССЛЕДОВАНИЕ</span><strong>Лишний в списке</strong></div>
+    <div class="top-actions"><a class="prologue-link" href="../">Мир Раскола</a><span id="progress" class="progress">0/5 версий</span><button type="button" id="help-btn" class="mini-btn" aria-label="Справка">?</button><button type="button" id="restart-btn" class="mini-btn" aria-label="Начать заново">↻</button></div>
+  </header>
+  <main class="layout">
+    <section class="play-column" aria-label="Локация">
+      <div class="scene-heading"><div><div id="chapter" class="eyebrow">ГЛАВА I • АРХИВ</div><h1 id="location-title">Архивный пост</h1></div><span id="scene-condition" class="scene-badge">ДОСТУП ОТКРЫТ</span></div>
+      <div id="scene" class="scene"><div id="scene-art" class="scene-art"></div><div id="hotspots" class="hotspots"></div><div class="scene-vignette"></div><div id="scene-hint" class="scene-hint">Коснитесь подсвеченного объекта, чтобы изучить его</div></div>
+      <div class="story-panel" aria-live="polite"><div class="story-mark">✦</div><div id="story" class="story-text"></div></div>
+      <div class="bottom-bar"><button id="nav-map" class="nav-btn">◈ <span>Карта</span></button><button id="nav-inventory" class="nav-btn">▣ <span>Инвентарь</span></button><button id="nav-evidence" class="nav-btn primary">⟡ <span>Улики и связи</span></button><button id="nav-notes" class="nav-btn">☷ <span>Журнал</span></button></div>
+    </section>
+    <aside class="sidebar"><div class="sidebar-heading">ДЕЛО № 017 <span>ОТКРЫТО</span></div><div class="sidebar-callout">«В эшелоне значатся двенадцать пассажиров. Камера зафиксировала тринадцатого.»</div><div class="sidebar-section-title">КЛЮЧЕВЫЕ ВЕРСИИ</div><div id="deduction-list" class="deduction-list"></div><div class="sidebar-bottom"><div id="lead" class="lead">Начните с регистрационного стола.</div><button id="sidebar-evidence" class="outline-btn">Открыть доску расследования →</button></div></aside>
+  </main>
+  <div id="overlay" class="overlay hidden" role="presentation"><section class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title"><div class="dialog-header"><div><span id="dialog-kicker" class="eyebrow">МАТЕРИАЛЫ ДЕЛА</span><h2 id="dialog-title">Дело</h2></div><button id="close-dialog" class="icon-close" aria-label="Закрыть">×</button></div><div id="dialog-body" class="dialog-body"></div></section></div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</div>
+</body>
+</html>

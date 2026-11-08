@@ -1,0 +1,37 @@
+/* Главное меню: дополняет prologue.css */
+.title-screen { grid-template-rows: minmax(0, 1fr); }
+.title-screen .scene { position: relative; isolation: isolate; overflow: hidden; min-height: 100%; }
+.title-menu a.btn { display: grid; place-items: center; text-decoration: none; text-align: center; }
+.title .subtitle { font-size: clamp(1rem, 3.6vw, 1.15rem); }
+.title.enter .title-menu .btn:nth-child(4) { animation-delay: 1.3s; }
+.title.enter .title-menu .btn:nth-child(5) { animation-delay: 1.4s; }
+.title.enter .title-menu .btn:nth-child(6) { animation-delay: 1.5s; }
+@media (max-height: 640px) {
+  .title .logo { font-size: clamp(2.2rem, 8vw, 3.6rem); }
+  .title-menu .btn { min-height: 44px; }
+}
+.hub-note { margin-top: .6rem; font-size: .85rem; }
+.hub-chapters { display: grid; gap: .6rem; }
+.hub-chapter {
+  position: relative; isolation: isolate; overflow: hidden; display: grid; gap: .25rem; padding: 1rem;
+  min-height: 9rem; align-content: end; border: 1px solid var(--edge); border-radius: .7rem; color: var(--ink); text-decoration: none;
+  transition: border-color .2s, transform .15s;
+}
+.hub-chapter::before {
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  background: linear-gradient(0deg, #0a0f16f5 35%, #0a0f16b3 70%, #0a0f1660), var(--art) center / cover no-repeat;
+}
+.hub-chapter:hover { border-color: var(--gold); }
+.hub-chapter:active { transform: scale(.98); }
+.hub-chapter b { font: 500 1.4rem Georgia, serif; }
+.hub-chapter small { color: #d8d0c4; line-height: 1.4; }
+.hub-chapter .kicker { display: flex; align-items: center; gap: .5rem; }
+.hub-tag { padding: .05rem .45rem; border-radius: 1rem; border: 1px solid var(--edge); font-size: .7rem; letter-spacing: .04em; color: var(--ink); text-transform: none; }
+.hub-tag.done { background: var(--gold); color: #1f160d; border-color: var(--gold); }
+.hub-about { display: grid; gap: .6rem; }
+.hub-about h3 { margin: .4rem 0 0; font: 500 1.1rem Georgia, serif; color: var(--gold); }
+.hub-about ul { margin: 0; padding-left: 1.2rem; display: grid; gap: .25rem; }
+.credits { display: grid; grid-template-columns: auto 1fr; gap: .3rem 1rem; margin: 0; }
+.credits dt { color: var(--muted); font-size: .85rem; }
+.credits dd { margin: 0; }
+@media (max-width: 420px) { .credits { grid-template-columns: 1fr; } .credits dd { margin-bottom: .3rem; } }

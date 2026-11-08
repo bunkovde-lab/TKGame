@@ -111,7 +111,7 @@ function overlay(){
       '<div class="pq-story"><p>'+esc(summary(p))+'</p><ul>'+effects(p).map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul></div>'+
       '<div class="pq-actions"><button type="button" class="btn primary" data-pq="start"'+(p.team.length===2?'':' disabled')+'>'+esc(T.start)+'</button>'+
       (hasSave?'<button type="button" class="btn" data-pq="resume">'+esc(T.resume)+'</button>':'')+
-      '<a class="btn" href="../prologue/">'+esc(T.prologue)+'</a></div></div>';
+      '<a class="btn" href="../prologue/?play=1">'+esc(T.prologue)+'</a></div></div>';
   };
   paint();
   el.addEventListener('click',ev=>{
