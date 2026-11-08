@@ -113,3 +113,30 @@ button.card:active { transform: scale(.98); }
 .nameplate .speaker-name.hero { background: linear-gradient(180deg, #2a3a4c, #1d2a38); color: #f2e3c8; border: 1px solid #e5b87966; }
 .hero-line .tw { font-style: italic; color: #e9dcc4; }
 .hero-line .tw::before { content: "— "; color: var(--gold); }
+
+/* Экипаж: спутники на локациях порта и карточки группы */
+.companion { position: absolute; z-index: 1; left: var(--cx, 10%); bottom: 4.2rem; height: 50%; aspect-ratio: 150 / 435; transform: translateX(-50%); padding: 0; border: 0; background: none; display: grid; justify-items: center; align-items: end; cursor: pointer; filter: drop-shadow(0 .6rem 1rem #000b) brightness(.92); transition: filter .25s, transform .25s; }
+.companion img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: bottom; pointer-events: none; }
+.companion span { position: relative; margin-bottom: -.4rem; padding: .15rem .45rem; font-size: .72rem; color: #f9e8cb; background: #0b1420e6; border: 1px solid #c39b648e; border-radius: .24rem; }
+.companion:hover, .companion:focus-visible { filter: drop-shadow(0 0 .8rem #e5b87966) brightness(1.05); }
+.companion:hover span, .companion:focus-visible span { background: var(--gold); color: #211811; }
+.companion.speaking { height: 82%; bottom: 0; filter: drop-shadow(0 .6rem 1.4rem #000c); animation: fade .5s ease both; }
+.companion.speaking span { display: none; }
+.scene.enter .companion { animation: rise .6s var(--ease-out) .35s both; }
+.crew-list { display: grid; gap: .5rem; }
+.crew-card { grid-template-columns: 4.2rem 1fr; align-items: start; gap: .7rem; }
+.crew-card .mood { display: inline-block; margin: .25rem 0; font-size: .64rem; letter-spacing: .06em; text-transform: uppercase; padding: .1rem .45rem; border-radius: 99px; border: 1px solid currentColor; }
+.crew-card p { font-size: .85rem; color: #ddd3c2; margin: .2rem 0 .4rem; }
+.crew-thumb { width: 100%; height: 7.5rem; object-fit: contain; object-position: bottom; background: radial-gradient(circle at 50% 70%, #2b3846, #121a23); border-radius: .5rem; border: 1px solid var(--edge); }
+.team-card .crew-thumb { height: 8.5rem; }
+.exits .exit.port { border-color: var(--gold); }
+.exits .exit.port span { color: var(--gold); }
+@media (max-width: 760px) {
+  .companion { height: 34%; bottom: 4.6rem; }
+  .companion.c0 { --cx: 9% !important; }
+  .companion.c1 { --cx: 27% !important; }
+  .companion.speaking { display: none; }
+  .ship-exits { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: .1rem; }
+  .ship-exits::-webkit-scrollbar { display: none; }
+  .ship-exits .exit { flex: none; }
+}

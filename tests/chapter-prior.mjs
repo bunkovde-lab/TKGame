@@ -5,7 +5,7 @@ import vm from 'node:vm';
 const store=new Map();
 const storage={getItem:k=>store.has(k)?store.get(k):null,setItem:(k,v)=>store.set(k,String(v)),removeItem:k=>store.delete(k)};
 const context=vm.createContext({window:{},localStorage:storage,sessionStorage:storage,location:{search:'',pathname:'/chapter/'},URLSearchParams});
-for(const file of ['data.js','engine.js','prior.js'])vm.runInContext(readFileSync(new URL(`../site/chapter/${file}`,import.meta.url),'utf8'),context,{filename:file});
+for(const file of ['data.js','story.js','engine.js','prior.js'])vm.runInContext(readFileSync(new URL(`../site/chapter/${file}`,import.meta.url),'utf8'),context,{filename:file});
 const E=context.window.CHAPTER_ENGINE,P=context.window.CHAPTER_PRIOR,D=context.window.CHAPTER_DATA;
 
 // Без предыстории глава стартует как раньше
@@ -38,4 +38,20 @@ assert.ok(P.opening(s,D.opening.text).endsWith(D.opening.text));
 
 // Пройти главу с предысторией по-прежнему можно: старое решение без ошибок
 const r=E.dispatch(s,'move','office');assert.ok(r.state);
-console.log('Chapter prior passed: neutral start, prologue carry-over (late dock, Mira trust, Irena speed, sanction threshold, Center heat), restore, greetings, backstory.');
+// Шаттл и группа: отсеки доступны на борту, двое из экипажа идут в порт
+let g=E.fresh(P.build({path:'calc',team:['mara','irena'],mira:'partial',center:null,late:'no'}));
+assert.deepEqual([...E.teamOf(g)],['mara','irena']);
+assert.ok(E.available(g,'mara')&&E.available(g,'irena'),'спутники доступны в порту');
+assert.ok(!E.available(g,'corvin'),'остальные ждут на шаттле');
+assert.equal(E.dispatch(g,'ship','lab').ok,false,'отсеки только на борту');
+g=E.dispatch(g,'move','office').state;assert.equal(g.ship,'airlock','на борт входят через шлюз');
+assert.ok(E.available(g,'corvin'),'на борту доступен весь экипаж');
+const t0=g.tick;g=E.dispatch(g,'ship','lab').state;assert.equal(g.ship,'lab');assert.equal(g.tick,t0,'переход по шаттлу не тратит время');
+assert.equal(E.dispatch(g,'team',['rein']).ok,false);
+g=E.dispatch(g,'team',['corvin','rein']).state;assert.deepEqual([...g.team],['corvin','rein']);
+g=E.dispatch(g,'move','port').state;assert.ok(E.available(g,'corvin')&&!E.available(g,'mara'));
+const back2=E.restore(JSON.parse(JSON.stringify(g)));assert.deepEqual([...back2.team],['corvin','rein']);
+assert.match(P.greeting(g,'corvin',D.npcs.corvin),/дезинфекцией/);
+for(const id of ['mara','corvin','irena','rein'])assert.match(D.npcs[id].topics.find(t=>/-team$/.test(t.id)).label,/После ночи/);
+for(const [id,r] of Object.entries(D.ship))for(const s of r.spots)assert.ok(['deductions','terminal','diary','map','puzzles','crew','team'].includes(s[4]),id+' '+s[0]);
+console.log('Chapter prior passed: neutral start, prologue carry-over (late dock, Mira trust, Irena speed, sanction threshold, Center heat), restore, greetings, backstory, shuttle rooms, team in port.');

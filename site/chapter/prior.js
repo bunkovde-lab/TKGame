@@ -77,10 +77,12 @@ const greet={
 };
 function greeting(state,id,npc){
   const p=state?.prior;if(!npc)return '';
-  if(!p)return npc.greeting||'';
+  if(!p){const D=window.CHAPTER_DATA;return state?.location!=='office'&&D?.companionLines?.[id]?.[state.location]||npc.greeting||'';}
   if(id==='mira')return greet.mira[p.mira]||npc.greeting;
   const extra=greet.crew[id]?.[p.mood[id]];
-  return (npc.greeting||'')+(extra?' '+extra:'');
+  const D=window.CHAPTER_DATA;
+  const base=state.location!=='office'&&D?.companionLines?.[id]?.[state.location]||npc.greeting||'';
+  return base+(extra?' '+extra:'');
 }
 function opening(state,text){const s=summary(state?.prior);return s?s+'\n\n'+text:text;}
 
