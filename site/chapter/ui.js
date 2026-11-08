@@ -20,7 +20,8 @@
     }
   };
   /* Разговор с экипажем идёт в его отсеке шаттла, как в прологе */
-  const crewRooms = { mara: 'scene-cockpit', corvin: 'scene-lab', irena: 'scene-analysis', rein: 'scene-airlock' };
+  const shortName = { mara: 'Мара', corvin: 'Корвин', irena: 'Ирена', rein: 'Рейн' };
+  let teamPick = null;
   const actorX = { port: 70, waiting: 85, registry: 78, clinic: 78, warehouse: 78, archive: 78, relay: 78 };
   let lastSceneKey = '',
     lastNpc = null;
@@ -165,6 +166,7 @@
     else panel.close();
   }
   function open(v, id = '') {
+    if (v === 'team') teamPick = null;
     const fresh = !panel.open || view !== v;
     view = v;
     focus = id;
@@ -243,30 +245,50 @@
       idx = Math.min(page, ps.length - 1);
     const turn = turns[idx];
     const heroLine = turn.who === 'Герой';
-    const crewTalk = n && crewIds.includes(state.activeNpc) && state.location === 'office';
-    const crewRoomName = { mara: 'Кабина', corvin: 'Лаборатория', irena: 'Аналитический отсек', rein: 'Шлюз' };
+    const onShip = state.location === 'office' && !!D.ship;
+    const room = onShip ? D.ship[state.ship] || D.ship.office : null;
+    const team = E.teamOf ? E.teamOf(state) : [];
+    const companionTalk = n && !onShip && crewIds.includes(state.activeNpc);
     const interview = state.location === 'registry' && state.activeNpc === 'chief';
-    const artFile = crewTalk
-      ? `../prologue/assets/${crewRooms[state.activeNpc]}.webp`
-      : interview
-        ? 'assets/scene-interview.webp'
-        : art(state.location);
-    const ratio = crewTalk ? '764 / 508' : state.location === 'office' ? '1 / 1' : '16 / 9';
-    const focusX = crewTalk ? 0.67 : n && actorX[state.location] ? actorX[state.location] / 100 : 0.5;
-    const actors = (state.location === 'office' ? [] : l.npcs || [])
-      .filter((id) => D.npcs[id] && npcAvailable(D.npcs[id]))
-      .map((id) =>
-        id === 'chief'
-          ? `<button type="button" class="btn remote-contact" data-a="talk" data-v="${id}">Кабинет руководителя · ${esc(D.npcs[id].name)}</button>`
-          : `<button type="button" class="embedded-actor" style="--actor-x:${actorX[state.location] || 70}%" data-a="talk" data-v="${id}" aria-label="Поговорить: ${esc(D.npcs[id].name)}"><span>${esc(D.npcs[id].name)}</span></button>`,
-      )
-      .join('');
-    const objects = (l.objects || [])
-      .map((o, i) => {
-        const done = o.evidence && state.evidence.includes(o.evidence);
-        return `<button type="button" class="hotspot${done ? ' done' : ''}" style="--x:${o.x || 35}%;--y:${o.y || 55}%;--i:${i}" data-a="object" data-v="${esc(o.id)}" aria-label="Осмотреть: ${esc(o.label)}"><b aria-hidden="true">${done ? '✓' : '◇'}</b><span>${esc(o.label)}</span></button>`;
-      })
-      .join('');
+    const artFile = onShip ? room.art : interview ? 'assets/scene-interview.webp' : art(state.location);
+    const ratio = onShip ? room.ratio : '16 / 9';
+    const focusX = onShip ? (room.crew ? 0.67 : 0.5) : companionTalk ? 0.3 : n && actorX[state.location] ? actorX[state.location] / 100 : 0.5;
+    const actors = onShip
+      ? room.crew
+        ? `<button type="button" class="embedded-actor" data-a="talk" data-v="${room.crew}" aria-label="Поговорить: ${esc(D.npcs[room.crew].name)}"><span>${esc(D.npcs[room.crew].name)}</span></button>`
+        : ''
+      : (l.npcs || [])
+          .filter((id) => D.npcs[id] && npcAvailable(D.npcs[id]))
+          .map((id) =>
+            id === 'chief'
+              ? `<button type="button" class="btn remote-contact" data-a="talk" data-v="${id}">Кабинет руководителя · ${esc(D.npcs[id].name)}</button>`
+              : `<button type="button" class="embedded-actor" style="--actor-x:${actorX[state.location] || 70}%" data-a="talk" data-v="${id}" aria-label="Поговорить: ${esc(D.npcs[id].name)}"><span>${esc(D.npcs[id].name)}</span></button>`,
+          )
+          .join('');
+    /* Спутники из экипажа стоят рядом с командиром на каждой локации порта */
+    const companions = onShip
+      ? ''
+      : team
+          .map((id, i) => {
+            const speaking = state.activeNpc === id;
+            if (n && !speaking) return '';
+            return `<button type="button" class="companion c${i}${speaking ? ' speaking' : ''}" style="--cx:${speaking ? 13 : 8 + i * 11}%" data-a="talk" data-v="${id}" aria-label="Поговорить: ${esc(D.npcs[id].name)}"><img src="${abs(`../prologue/assets/crew-${id}${speaking ? '-talk' : ''}.webp`)}" alt=""><span>${esc(shortName[id])}</span></button>`;
+          })
+          .join('');
+    const spots = onShip
+      ? room.spots.map(
+          ([id, label, x, y], i) =>
+            `<button type="button" class="hotspot" style="--x:${x}%;--y:${y}%;--i:${i}" data-a="ship-spot" data-v="${esc(id)}" aria-label="${esc(label)}"><b aria-hidden="true">◇</b><span>${esc(label)}</span></button>`,
+        )
+      : null;
+    const objects = onShip
+      ? spots.join('')
+      : (l.objects || [])
+          .map((o, i) => {
+            const done = o.evidence && state.evidence.includes(o.evidence);
+            return `<button type="button" class="hotspot${done ? ' done' : ''}" style="--x:${o.x || 35}%;--y:${o.y || 55}%;--i:${i}" data-a="object" data-v="${esc(o.id)}" aria-label="Осмотреть: ${esc(o.label)}"><b aria-hidden="true">${done ? '✓' : '◇'}</b><span>${esc(o.label)}</span></button>`;
+          })
+          .join('');
     let dialog = '';
     const last = idx === ps.length - 1;
     const prev = idx > 0 ? b('prev-page', '', '◂ Назад') : '';
@@ -298,11 +320,21 @@
         ? `<section class="thought typing-host" aria-label="Мысль"><div class="kicker">Внутренний голос</div>${tw(thought, `t:${state.location}:${thought.slice(0, 40)}`, 'thought')}<div class="after-type">${b('hide-thought', '', 'Продолжить')}</div></section>`
         : '';
     const encounters = `${state.location === 'warehouse' && !state.combat.some((x) => x.startsWith('cargo:')) ? `<button type="button" class="btn exit danger" data-a="encounter" data-v="cargo"><span aria-hidden="true">⚠</span> Движение у контейнера</button>` : ''}${state.location === 'relay' && !state.combat.some((x) => x.startsWith('relay:')) ? `<button type="button" class="btn exit danger" data-a="encounter" data-v="relay"><span aria-hidden="true">⚠</span> Охрана ретранслятора</button>` : ''}`;
-    const exits = !text && !thoughtBox ? `<nav class="exits" aria-label="Переходы"><button type="button" class="btn exit" data-a="panel" data-v="map"><span aria-hidden="true">↗</span> Перемещение</button>${state.location !== 'office' ? `<button type="button" class="btn exit" data-a="move" data-v="office"><span aria-hidden="true">↗</span> На шаттл</button>` : ''}${encounters}</nav>` : '';
-    const placeName = interview ? 'Кабинет начальника порта' : crewTalk ? crewRoomName[state.activeNpc] : l.name.replace(/^Шаттл · /, '');
-    const kicker = `${state.location === 'office' ? 'Шаттл' : 'Лунный арбитраж'} · ${E.period(state)}${state.sanction ? ' · Санкция Центра' : ''}`;
-    const sceneKey = `${state.location}:${crewTalk ? state.activeNpc : ''}:${interview}`;
-    app.innerHTML = `<main class="game">${topBar()}<section class="scene${n ? ' scene-speaking' : ''}${sceneEnter(sceneKey)}" aria-label="${esc(placeName)}" style="--art:url('${abs(artFile)}')"><div class="pano"><div class="pano-track" style="--ratio:${ratio}"><div class="scene-art"></div>${!n && !text ? actors + objects : ''}</div></div><i class="pano-edge left" aria-hidden="true">‹</i><i class="pano-edge right" aria-hidden="true">›</i><canvas class="dust-fx" aria-hidden="true"></canvas><div class="bars top-only" aria-hidden="true"><i></i></div><header><div class="kicker">${esc(kicker)}</div><h1>${esc(placeName)}</h1>${!n ? `<div class="goal"><span>Цель</span>${esc(objective())}</div>` : ''}</header>${dialog}${thoughtBox}${exits}${cinema ? `<div class="cinema" style="--combat-art:url('${abs(`assets/combat-${cinemaArt}.webp`)}')"><div class="kicker">Хищный расчёт · Последствия</div><p>${esc(cinema)}</p>${b('cinema-done', '', 'Оценить последствия', true)}</div>` : ''}${state.ending ? endingMarkup() : ''}</section></main>`;
+    const shipExits = onShip
+      ? (state.ship === 'airlock' ? `<button type="button" class="btn exit port" data-a="panel" data-v="map"><span aria-hidden="true">⇲</span> Выйти в порт</button>` : '') +
+        (D.shipOrder || [])
+          .filter((id) => id !== state.ship)
+          .map((id) => `<button type="button" class="btn exit" data-a="ship" data-v="${id}"><span aria-hidden="true">↗</span> ${esc(D.ship[id].name)}</button>`)
+          .join('')
+      : '';
+    const exits =
+      !text && !thoughtBox
+        ? `<nav class="exits${onShip ? ' ship-exits' : ''}" aria-label="Переходы">${onShip ? shipExits : `<button type="button" class="btn exit" data-a="panel" data-v="map"><span aria-hidden="true">↗</span> Перемещение</button><button type="button" class="btn exit" data-a="move" data-v="office"><span aria-hidden="true">↗</span> На шаттл</button>${encounters}`}</nav>`
+        : '';
+    const placeName = interview ? 'Кабинет начальника порта' : onShip ? room.name : l.name;
+    const kicker = `${onShip ? 'Шаттл · у причала' : 'Лунный арбитраж'} · ${E.period(state)}${state.sanction ? ' · Санкция Центра' : ''}`;
+    const sceneKey = `${state.location}:${onShip ? state.ship : ''}:${interview}`;
+    app.innerHTML = `<main class="game">${topBar()}<section class="scene${n ? ' scene-speaking' : ''}${onShip && room.crew ? ' has-crew' : ''}${sceneEnter(sceneKey)}" aria-label="${esc(placeName)}" style="--art:url('${abs(artFile)}')"><div class="pano"><div class="pano-track" style="--ratio:${ratio}"><div class="scene-art"></div>${!n && !text ? actors + objects : ''}</div></div>${!text || companionTalk ? companions : ''}<i class="pano-edge left" aria-hidden="true">‹</i><i class="pano-edge right" aria-hidden="true">›</i><canvas class="dust-fx" aria-hidden="true"></canvas><div class="bars top-only" aria-hidden="true"><i></i></div><header><div class="kicker">${esc(kicker)}</div><h1>${esc(placeName)}</h1>${!n ? `<div class="goal"><span>Цель</span>${esc(objective())}</div>` : ''}</header>${dialog}${thoughtBox}${exits}${cinema ? `<div class="cinema" style="--combat-art:url('${abs(`assets/combat-${cinemaArt}.webp`)}')"><div class="kicker">Хищный расчёт · Последствия</div><p>${esc(cinema)}</p>${b('cinema-done', '', 'Оценить последствия', true)}</div>` : ''}${state.ending ? endingMarkup() : ''}</section></main>`;
     if (FX) {
       FX.setupPano(app, sceneKey, focusX, Boolean(n), notify);
       FX.startDust(app);
@@ -430,20 +462,53 @@
             )
             .join('')}</div>`;
         break;
-      case 'crew':
+      case 'crew': {
         title = 'Оперативная группа';
-        body = `<p>Связь с шаттлом проходит по местной сети. Поручение выполняется в игровое время, пока вы занимаетесь другими действиями.</p><div class="grid"><article class="card"><h3>Ирена Соль</h3><small>Аналитик</small><p>Я могу установить происхождение административного ключа. Но нужен проверенный след, а не фамилия из слухов.</p>${b('assign', 'trace', state.task?.done ? 'Сверка завершена' : state.task ? 'Поручение выполняется' : 'Поручить поиск источника ключа', true, !!state.task)}</article><article class="card"><h3>Элиас Корвин</h3><small>Врач-криминалист</small><p>Совпадение образца — ещё не диагноз. Сопоставьте контроль и наблюдение; тогда решим, была ли карантинная мера медицинской.</p>${b('puzzle', 'bio', 'Биологическая экспертиза')}</article><article class="card"><h3>Мара Вель</h3><small>Пилот и навигатор</small><p>В порту важен порядок открывания створок. Официальный маршрут бывает красивее настоящего. Сравните время записи с физическим доступом.</p>${b('puzzle', 'timeline', 'Восстановить хронологию')}</article><article class="card"><h3>Гален Рейн</h3><small>Безопасность</small><p>Могу прикрыть свидетеля или удержать выход. Одновременно обе задачи не обещаю. Решите, что нужно сохранить в столкновении.</p>${b('wait', '', 'Подождать 10 минут')}</article></div><div class="actions">${[
-          'mara',
-          'corvin',
-          'irena',
-          'rein',
-        ]
-          .filter((id) => D.npcs[id])
-          .map((id) => b('crew-talk', id, 'Поговорить: ' + D.npcs[id].name))
-          .join(
-            '',
-          )}</div>${state.task ? `<p class="counter">${state.task.done ? 'Ирена завершила поручение; результат в деле.' : 'Аналитик занят. Продолжайте расследование или дождитесь ответа.'}</p>` : ''}`;
+        const team = E.teamOf ? E.teamOf(state) : [];
+        const onShip = state.location === 'office';
+        const roomName = (id) => D.ship?.[E.crewRoom?.[id]]?.name || 'Шаттл';
+        const notes = {
+          mara: 'В порту важен порядок открывания створок. Официальный маршрут бывает красивее настоящего.',
+          corvin: 'Совпадение образца ещё не диагноз. Сопоставьте контроль и наблюдение.',
+          irena: 'Установит происхождение административного ключа, если дать ей проверенный след.',
+          rein: 'Может прикрыть свидетеля или удержать выход. Обе задачи сразу не обещает.',
+        };
+        const cards = crewIds
+          .map((id) => {
+            const with_ = !onShip && team.includes(id);
+            const where = onShip ? `на борту · ${roomName(id)}` : with_ ? 'с вами в порту' : `на шаттле · ${roomName(id)}`;
+            const mood = moodOf(id);
+            const extra =
+              id === 'irena'
+                ? b('assign', 'trace', state.task?.done ? 'Сверка завершена' : state.task ? 'Поручение выполняется' : 'Поручить поиск источника ключа', !state.task, !!state.task || !onShip)
+                : id === 'corvin'
+                  ? b('panel', 'puzzles', 'Экспертизы', false, !onShip)
+                  : id === 'rein'
+                    ? b('wait', '', 'Подождать 10 минут')
+                    : b('panel', 'map', 'Карта порта');
+            return `<article class="card crew-card"><img class="crew-thumb" src="${abs(`../prologue/assets/crew-${id}.webp`)}" alt=""><div><h3>${esc(D.npcs[id].name)}</h3><small>${esc(D.npcs[id].role)} · ${esc(where)}</small>${mood ? `<span class="mood mood-${mood.cls}">${esc(mood.label)}</span>` : ''}<p>${esc(notes[id])}</p><div class="actions">${b('crew-talk', id, 'Поговорить', false, !E.available(state, id))}${extra}</div></div></article>`;
+          })
+          .join('');
+        body = `<p class="muted">${onShip ? 'Экипаж на борту, каждый в своём отсеке. Состав группы для выхода в порт меняют у стойки в шлюзе.' : `С вами в порту: ${team.map((id) => shortName[id]).join(' и ')}. Остальные ждут на шаттле: чтобы поговорить с ними или провести экспертизу, вернитесь на борт.`}</p><div class="crew-list">${cards}</div>${onShip ? `<div class="actions">${b('panel', 'team', 'Выбрать, кто идёт в порт')}</div>` : ''}${state.task ? `<p class="counter">${state.task.done ? 'Ирена завершила поручение; результат в деле.' : 'Ирена занята поручением. Продолжайте расследование.'}</p>` : ''}`;
         break;
+      }
+      case 'team': {
+        title = 'Кто идёт в порт';
+        if (!teamPick) teamPick = [...(E.teamOf ? E.teamOf(state) : [])];
+        body = `<p>Двое из экипажа идут с вами: их можно спросить прямо на месте, они замечают своё. Остальные остаются на шаттле.</p><div class="team-grid">${crewIds
+          .map(
+            (id) =>
+              `<button type="button" class="team-card${teamPick.includes(id) ? ' on' : ''}" data-a="team-toggle" data-v="${id}" aria-pressed="${teamPick.includes(id)}"><img class="crew-thumb" src="${abs(`../prologue/assets/crew-${id}.webp`)}" alt=""><b>${esc(D.npcs[id].name)}</b><small>${esc(D.npcs[id].role)}</small></button>`,
+          )
+          .join('')}</div><div class="actions">${b('team-confirm', '', 'Утвердить состав', true, teamPick.length !== 2)}</div>`;
+        break;
+      }
+      case 'diary': {
+        title = 'Дневник командира';
+        const sum = P && state.prior ? P.summary(state.prior) : '';
+        body = `<p class="document">${esc(sum || 'Ночь на шаттле: приказ Центра, экипаж Даля, первые следы Узла-9. Утром порт откроет реестры.')}</p><p class="muted">Записи пролога. Изменить предысторию можно в меню.</p><div class="actions"><a class="btn" href="../prologue/">Перечитать пролог</a></div>`;
+        break;
+      }
       case 'terminal':
         title = 'Центр · Оперативное согласование';
         body = `<p>Запрос на принудительное изъятие реестра и допрос руководителя порта. Представьте проверяемые основания и связь с юрисдикцией. Полученная санкция ограничена этой операцией.</p>${state.sanction ? '<article class="card"><h3>Специальная санкция получена</h3><p>Разрешены изъятие административного ключа и официальный допрос. Мера не разрешает внеслужебное насилие.</p></article>' : `${evidenceChoices(state.evidence)}${b('submit-sanction', '', 'Отправить выбранное обоснование', true)}`}<h3>Официальный допрос</h3><p>Убедитесь, что знаете противоречие и можете подтвердить слова независимым материалом. Давление способно породить удобную ложь.</p><div class="actions">${b('interview', 'rapport', 'Дать защиту и выслушать')}${b('interview', 'evidence', 'Предъявить противоречие')}${b('interview', 'pressure', 'Пригрозить последствиями')}</div><h3>Заключение по делу</h3><p>Доступность итогового решения определяется качеством расследования и сохранёнными людьми и материалами.</p><div class="actions">${entries(
@@ -475,7 +540,7 @@
       }
       case 'encounter':
         title = 'Хищный расчёт';
-        body = `<img class="encounter-art" src="assets/combat-${focus}.webp" alt="Обстановка перед столкновением"><div class="kicker">${focus === 'cargo' ? 'Грузовой терминал' : 'Ретранслятор'}</div><p>${focus === 'cargo' ? 'У контейнера вооружённый надсмотрщик. Рядом свидетель и открытый носитель; движение к одному оставит другого без защиты. Мощь позволит быстро сблизиться, но не оказаться в двух местах.' : 'У ретранслятора подготовленный боец. Линия огня перекрывает доступ к накопителю. Рейн может удержать выход, если успеет получить ваше указание.'}</p><p>Приоритет определит последствия. Разведка и поддержка меняют исход, гарантированного правильного решения нет.</p><div class="grid">${b('tactic', 'protect', 'Прикрыть свидетеля')}${b('tactic', 'evidence', 'Сохранить носитель')}${b('tactic', 'coordinate', 'Скоординироваться с Рейном')}${b('tactic', 'force', 'Немедленно обезвредить')}${b('tactic', 'withdraw', 'Отойти и сохранить группу')}</div>`;
+        body = `<img class="encounter-art" src="assets/combat-${focus}.webp" alt="Обстановка перед столкновением"><div class="kicker">${focus === 'cargo' ? 'Грузовой терминал' : 'Ретранслятор'}</div><p>${focus === 'cargo' ? 'У контейнера вооружённый надсмотрщик. Рядом свидетель и открытый носитель; движение к одному оставит другого без защиты. Мощь позволит быстро сблизиться, но не оказаться в двух местах.' : 'У ретранслятора подготовленный боец. Линия огня перекрывает доступ к накопителю. Рейн может удержать выход, если успеет получить ваше указание.'}</p><p>Приоритет определит последствия. Разведка и поддержка меняют исход, гарантированного правильного решения нет.</p><div class="grid">${b('tactic', 'protect', 'Прикрыть свидетеля')}${b('tactic', 'evidence', 'Сохранить носитель')}${b('tactic', 'coordinate', (E.teamOf ? E.teamOf(state) : []).includes('rein') ? 'Скоординироваться с Рейном' : 'Вызвать Рейна по связи')}${b('tactic', 'force', 'Немедленно обезвредить')}${b('tactic', 'withdraw', 'Отойти и сохранить группу')}</div>`;
         break;
       case 'system':
         title = 'Меню';
@@ -620,14 +685,35 @@
         run('end-talk');
         break;
       case 'crew-talk':
-        if (state.location !== 'office') {
-          notify('Для личного разговора вернитесь на шаттл.');
+        if (!E.available(state, v)) {
+          notify(`${shortName[v] || 'Член экипажа'} на шаттле. Вернитесь на борт, чтобы поговорить.`);
           break;
         }
         close();
         thought = '';
         topicPage = 0;
+        if (state.location === 'office' && E.crewRoom?.[v] && state.ship !== E.crewRoom[v]) run('ship', E.crewRoom[v]);
         run('talk', v, { showPassage: false });
+        break;
+      case 'ship':
+        thought = '';
+        speech = '';
+        run('ship', v);
+        break;
+      case 'ship-spot': {
+        const spot = D.ship?.[state.ship]?.spots.find((x) => x[0] === v);
+        if (spot) open(spot[4]);
+        break;
+      }
+      case 'team-toggle':
+        teamPick = teamPick.includes(v) ? teamPick.filter((x) => x !== v) : [...teamPick, v].slice(-2);
+        paintPanel();
+        break;
+      case 'team-confirm':
+        if (run('team', teamPick)) {
+          teamPick = null;
+          close();
+        }
         break;
       case 'talk':
         thought = '';
