@@ -1025,3 +1025,21 @@ small, .muted { color: var(--muted); }
 .rnode text { font-size: 3.3px; fill: #dbe5f2; pointer-events: none; paint-order: stroke; stroke: #070b12; stroke-width: .8px; }
 @media (max-width: 560px) { .autopsy { grid-template-columns: 1fr; } .body-fig { max-height: 11rem; } }
 @media (prefers-reduced-motion: reduce) { .breach-board.live .br-room.leak, .bmark circle, .star-map .dal-lane { animation: none; } }
+
+/* Панорама помещения */
+.pano { position: absolute; inset: 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
+.pano::-webkit-scrollbar { display: none; }
+.pano-track { position: relative; height: 100%; aspect-ratio: var(--ratio, 3 / 2); min-width: 100%; }
+.pano-track .scene-art { background-position: center 54%; }
+.pano.dragging { cursor: grabbing; user-select: none; }
+.pano-edge { position: absolute; top: 50%; z-index: 2; transform: translateY(-50%); display: none; place-items: center; width: 1.7rem; height: 3.2rem; font-style: normal; font-size: 1.6rem; color: #f2dfbf; background: #0b1420b0; border: 1px solid #e5b87955; pointer-events: none; transition: opacity .3s; animation: edge-nudge 2.4s ease-in-out infinite; }
+.pano-edge.left { left: 0; border-radius: 0 .6rem .6rem 0; }
+.pano-edge.right { right: 0; border-radius: .6rem 0 0 .6rem; animation-direction: reverse; }
+.scene.pano-on .pano-edge { display: grid; }
+.scene.at-left .pano-edge.left, .scene.at-right .pano-edge.right, .scene-speaking .pano-edge { opacity: 0; }
+@keyframes edge-nudge { 50% { transform: translate(3px, -50%); } }
+@media (max-width: 760px) {
+  .scene.has-crew { --art-position: center 54%; }
+  .scene.has-crew .embedded-actor { --actor-x: 67%; --actor-width: 23%; }
+}
+@media (prefers-reduced-motion: reduce) { .pano-edge { animation: none; } }

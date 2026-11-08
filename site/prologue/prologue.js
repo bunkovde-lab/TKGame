@@ -566,13 +566,40 @@ function render() {
   const goal=!crew&&currentObjective()?'<div class="goal"><span>Цель</span>'+esc(currentObjective())+'</div>':'';
   const thought=!crew&&thoughtOpen?'<div class="thought typing-host'+(reduceMotion?'':' enter')+'"><div class="kicker">Внутренний голос</div>'+tw(room.thought,'t:'+state.room,'thought')+'<div class="after-type">'+btn('dismiss-thought','','Продолжить')+'</div></div>':'';
   const sceneArt=crewId ? 'scene-'+state.room : 'room-'+state.room;
-  app.innerHTML='<main class="game">'+topBar(true)+'<section class="scene '+(crew?'scene-speaking ':'')+(crewId?'has-crew':'')+cam+sceneEnter('room-'+state.room)+'" aria-label="'+esc(room.name)+'" style="--art:url(assets/'+sceneArt+'.webp)"><div class="scene-art">'+fxLayer(state.room)+'</div><canvas class="dust-fx" aria-hidden="true"></canvas><div class="bars top-only" aria-hidden="true"><i></i></div>'+
+  const oldPano=app.querySelector('.pano');if(oldPano)panoScroll[panoRoom]=oldPano.scrollLeft;
+  app.innerHTML='<main class="game">'+topBar(true)+'<section class="scene '+(crew?'scene-speaking ':'')+(crewId?'has-crew':'')+cam+sceneEnter('room-'+state.room)+'" aria-label="'+esc(room.name)+'" style="--art:url(assets/'+sceneArt+'.webp)"><div class="pano"><div class="pano-track" style="--ratio:'+(crewId?'764 / 508':'1 / 1')+'"><div class="scene-art">'+fxLayer(state.room)+'</div>'+(crew?'':hotspots+(crewId?actor(crewId):''))+'</div></div><i class="pano-edge left" aria-hidden="true">‹</i><i class="pano-edge right" aria-hidden="true">›</i><canvas class="dust-fx" aria-hidden="true"></canvas><div class="bars top-only" aria-hidden="true"><i></i></div>'+
     (roomCard?'<div class="room-card" aria-hidden="true"><small>Шаттл · '+esc(E.period(state.tick))+'</small><strong>'+esc(room.name)+'</strong></div>':'')+
     '<header><div class="kicker">Шаттл · '+esc(E.period(state.tick))+'</div><h1>'+esc(room.name)+'</h1>'+goal+'</header>'+
-    (crew?'':hotspots+(crewId?actor(crewId):''))+
     conversation+thought+(crew?'':'<nav class="exits" aria-label="Двери">'+exits+'</nav>')+
     '</section></main>';
+  setupPano(crewId,Boolean(crew));
   startTyping();
+}
+/* Панорама: на узком экране арт помещения можно листать влево и вправо */
+const panoScroll={};let panoRoom='';let panoHinted=false;
+try{panoHinted=localStorage.getItem('tk-pano-hint')==='1';}catch{}
+function setupPano(crewId,talking){
+  const pano=app.querySelector('.pano');if(!pano)return;
+  const track=pano.firstElementChild;const scene=pano.parentElement;
+  const max=()=>track.offsetWidth-pano.clientWidth;
+  const edges=()=>{const m=max();scene.classList.toggle('pano-on',m>4);scene.classList.toggle('at-left',pano.scrollLeft<=4);scene.classList.toggle('at-right',pano.scrollLeft>=m-4);};
+  const focus=x=>Math.max(0,Math.min(max(),track.offsetWidth*x-pano.clientWidth/2));
+  const actorX=crewId?parseFloat(getComputedStyle(app.querySelector('.scene')).getPropertyValue('--actor-x'))/100||.67:.5;
+  if(panoRoom!==state.room){panoRoom=state.room;pano.scrollLeft=focus(crewId?actorX:.5);}
+  else pano.scrollLeft=panoScroll[state.room]??focus(.5);
+  if(talking&&crewId){const to=focus(actorX);if(Math.abs(pano.scrollLeft-to)>8)pano.scrollTo({left:to,behavior:reduceMotion?'auto':'smooth'});}
+  edges();
+  pano.addEventListener('scroll',()=>{panoScroll[state.room]=pano.scrollLeft;edges();layoutFx();},{passive:true});
+  // Мышью тоже можно тянуть
+  let drag=null;
+  pano.addEventListener('pointerdown',e=>{if(e.pointerType!=='mouse'||e.target.closest('button'))return;drag={x:e.clientX,left:pano.scrollLeft};pano.classList.add('dragging');});
+  pano.addEventListener('pointermove',e=>{if(drag)pano.scrollLeft=drag.left-(e.clientX-drag.x);});
+  const end=()=>{drag=null;pano.classList.remove('dragging');};
+  pano.addEventListener('pointerup',end);pano.addEventListener('pointerleave',end);
+  if(max()>4&&!panoHinted&&!talking&&!thoughtOpen){
+    panoHinted=true;try{localStorage.setItem('tk-pano-hint','1');}catch{}
+    setTimeout(()=>notify('Арт можно листать пальцем влево и вправо.'),600);
+  }
 }
 function shelf(id) {
   const item=C.items[id];
