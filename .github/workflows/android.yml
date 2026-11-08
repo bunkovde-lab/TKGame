@@ -1,0 +1,77 @@
+name: Android APK
+
+on:
+  push:
+    branches: [main, 'claude/**']
+    paths:
+      - "site/**"
+      - "android/**"
+      - ".github/workflows/android.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-apk
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Copy game into APK assets
+        run: |
+          set -euo pipefail
+          rm -rf build-android-assets && mkdir -p build-android-assets
+          rsync -a --exclude legacy --exclude test --exclude sw.js site/ build-android-assets/site/
+
+      - name: Signing key from repository secret (optional)
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+            echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build APK
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: gradle --no-daemon assembleRelease
+
+      - name: Rename APK
+        run: cp android/app/build/outputs/apk/release/app-release.apk MirRaskola.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MirRaskola-apk
+          path: MirRaskola.apk
+
+      - name: Publish download link
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-latest
+          name: Мир Раскола для Android (последняя сборка)
+          target_commitish: ${{ github.sha }}
+          prerelease: true
+          make_latest: false
+          body: |
+            Файл для установки на Android-телефон или планшет: MirRaskola.apk ниже.
+            Сборка из ветки ${{ github.ref_name }}, коммит ${{ github.sha }}.
+            Как поставить: скачайте файл на устройстве, откройте его и разрешите установку из этого источника.
+          files: MirRaskola.apk
