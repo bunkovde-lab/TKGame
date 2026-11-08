@@ -117,6 +117,8 @@
     endingPage = 0,
     workStage = 0;
   let openedIntro = false;
+  let sceneAsked = '',
+    gameVals = {};
   try {
     openedIntro = !!localStorage.getItem(AUTO);
   } catch {}
@@ -162,6 +164,7 @@
     view = '';
     focus = '';
     selection = [];
+    if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(needleRaf);
     if (FX) FX.panelClose(panel);
     else panel.close();
   }
@@ -173,6 +176,7 @@
     selection = [];
     page = 0;
     if (v === 'puzzle') workStage = 0;
+    if (v === 'game') gameVals = {};
     paintPanel();
     FX?.panelOpened(panel, fresh);
     if (!panel.open) panel.showModal();
@@ -219,9 +223,8 @@
     return `<header class="top"><div class="brand"><span><b>◈</b> Мир Раскола</span><small>Глава I · Семь имён</small></div><nav class="tabs" aria-label="Разделы">${tabs}</nav><div class="meta">${departureChip()}<span class="clock">${ico('clock')}${esc(timeLabel())}</span><button type="button" class="icon-btn" data-a="panel" data-v="system" aria-label="Меню">${ico('menu') || '☰'}</button></div></header>`;
   }
   function moodOf(id) {
-    const p = state.prior?.mood?.[id];
     if (crewIds.includes(id)) {
-      const m = p || 'mid';
+      const m = E.moodOf ? E.moodOf(state, id) : state.prior?.mood?.[id] || 'mid';
       return { cls: m === 'high' ? 'up' : m === 'low' ? 'down' : 'flat', label: m === 'high' ? 'на вашей стороне' : m === 'low' ? 'держит дистанцию' : 'присматривается' };
     }
     if (!(id in (state.trust || {}))) return null;
@@ -238,11 +241,12 @@
     let n = state.activeNpc && D.npcs[state.activeNpc];
     const activeTopics = n ? E.availableTopics(state, state.activeNpc) : [];
     const current = activeTopics.find((t) => t.id === state.topic);
-    let text = speech || current?.text || (P && n ? P.greeting(state, state.activeNpc, n) : n?.greeting) || '';
+    let text = speech || (current && (E.topicText ? E.topicText(state, current) : current.text)) || (P && n ? P.greeting(state, state.activeNpc, n) : n?.greeting) || '';
     let who = speech ? speaker : n?.name;
     const turns = n ? turnPages(text) : pages(text).map((t) => ({ who: '', text: t }));
     const ps = turns.map((t) => t.text),
       idx = Math.min(page, ps.length - 1);
+    page = idx;
     const turn = turns[idx];
     const heroLine = turn.who === 'Герой';
     const onShip = state.location === 'office' && !!D.ship;
@@ -302,11 +306,13 @@
         reply = ts
           .map((t, i) => {
             const asked = (state.talked || []).includes(t.id);
-            return `<button type="button" class="choice${asked ? ' asked' : ''}" data-a="topic" data-v="${esc(t.id)}" style="--i:${i}"><b>${i + 1}</b><span>${esc(t.label)}</span></button>`;
+            return `<button type="button" class="choice${asked ? ' asked' : ''}${t.personal ? ' personal' : ''}" data-a="topic" data-v="${esc(t.id)}" style="--i:${i}"><b>${t.personal ? '♦' : i + 1}</b><span>${esc(t.label)}</span></button>`;
           })
           .join('');
         if (activeTopics.length > 4) tools += b('topics', '', `Другие темы · ${topicPage + 1}/${Math.ceil(activeTopics.length / 4)}`);
       }
+      if (last && !speech) reply = readTools() + reply;
+      else if (last) tools = readTools() + tools;
       const mood = moodOf(state.activeNpc);
       const talkEnter = state.activeNpc !== lastNpc && !FX?.reduceMotion ? ' enter' : '';
       dialog = `<section class="conversation typing-host${talkEnter}" aria-label="Разговор"><div class="nameplate"><strong class="speaker-name${heroLine ? ' hero' : ''}">${esc(heroLine ? 'Командир' : speech && who !== n.name && !turn.who ? who : n.name)}</strong><span class="speaker-role">${esc(heroLine ? 'Вы' : n.role || '')}</span>${mood && !heroLine ? `<span class="mood mood-${mood.cls}">${esc(mood.label)}</span>` : ''}<button type="button" class="icon-btn talk-close" data-a="leave-talk" data-v="" aria-label="Закончить разговор">${ico('close') || '×'}</button></div><div class="${heroLine ? 'hero-line' : 'npc-line'}">${tw(ps[idx], `n:${state.activeNpc}:${state.topic || ''}:${idx}:${ps[idx].slice(0, 40)}`, heroLine ? 'thought' : state.activeNpc)}</div><div class="after-type"><div class="reply">${reply}</div><div class="conversation-tools">${prev}${tools}<small class="page-count">${ps.length > 1 ? `${idx + 1} / ${ps.length}` : ''}</small></div></div></section>`;
@@ -327,9 +333,11 @@
           .map((id) => `<button type="button" class="btn exit" data-a="ship" data-v="${id}"><span aria-hidden="true">↗</span> ${esc(D.ship[id].name)}</button>`)
           .join('')
       : '';
+    const scene = E.pendingScene ? E.pendingScene(state) : null;
+    const sceneBtn = scene ? `<button type="button" class="btn exit crew-call" data-a="panel-scene" data-v="${esc(scene.id)}"><span aria-hidden="true">📡</span> Экипаж на связи</button>` : '';
     const exits =
       !text && !thoughtBox
-        ? `<nav class="exits${onShip ? ' ship-exits' : ''}" aria-label="Переходы">${onShip ? shipExits : `<button type="button" class="btn exit" data-a="panel" data-v="map"><span aria-hidden="true">↗</span> Перемещение</button><button type="button" class="btn exit" data-a="move" data-v="office"><span aria-hidden="true">↗</span> На шаттл</button>${encounters}`}</nav>`
+        ? `<nav class="exits${onShip ? ' ship-exits' : ''}" aria-label="Переходы">${sceneBtn}${onShip ? shipExits : `<button type="button" class="btn exit" data-a="panel" data-v="map"><span aria-hidden="true">↗</span> Перемещение</button><button type="button" class="btn exit" data-a="move" data-v="office"><span aria-hidden="true">↗</span> На шаттл</button>${encounters}`}</nav>`
         : '';
     const placeName = interview ? 'Кабинет начальника порта' : onShip ? room.name : l.name;
     const kicker = `${onShip ? 'Шаттл · у причала' : 'Лунный арбитраж'} · ${E.period(state)}${state.sanction ? ' · Санкция Центра' : ''}`;
@@ -341,12 +349,100 @@
       FX.startTyping(app);
       FX.sfx.ambient(state.ending ? 'ending' : interview ? 'interview' : state.location);
     }
+    /* Переговоры экипажа открываются сами, когда сцена свободна от текста и окон */
+    if (scene && !text && !thoughtBox && !cinema && !panel.open && sceneAsked !== scene.id) {
+      sceneAsked = scene.id;
+      setTimeout(() => {
+        if (!panel.open && E.pendingScene(state)?.id === scene.id && !speech && !cinema) {
+          FX?.sfx.open();
+          FX?.haptic(true, [20, 40, 20]);
+          open('scene', scene.id);
+        }
+      }, 650);
+    }
+  }
+  /* Чтение собеседника: линзы пролога, пауза и «Уличить» */
+  function readTools() {
+    const r = D.reads?.[state.activeNpc];
+    if (!r || !D.lenses || !state.talked.includes(r.topic)) return '';
+    const npc = state.activeNpc;
+    const lenses = entries(D.lenses)
+      .map(([id, l]) => `<button type="button" class="btn lens lens-${id}${state.reads.includes(npc + ':' + id) ? ' on' : ''}" data-a="read" data-v="${id}" aria-pressed="${state.reads.includes(npc + ':' + id)}"><b aria-hidden="true">${l.icon}</b> ${esc(l.label)}</button>`)
+      .join('');
+    const pause = `<button type="button" class="btn lens lens-pause${state.reads.includes(npc + ':pause') ? ' on' : ''}" data-a="pause" data-v=""><b aria-hidden="true">…</b> Пауза</button>`;
+    const hit = state.reads.includes(npc + ':' + r.lens);
+    const caught = state.caught.includes(npc);
+    const confront = hit ? `<button type="button" class="btn primary confront${caught ? ' done' : ''}" data-a="confront" data-v="">${caught ? '✓ ' : '⚑ '}${esc(r.confront.label)}</button>` : '';
+    return `<div class="lens-row" role="group" aria-label="Чтение собеседника"><small class="lens-hint">${caught ? 'Уличён' : 'Прочитать'}</small>${lenses}${pause}</div>${confront}`;
+  }
+  /* Мини-игры перед находками */
+  function gameFor(objectId) {
+    return entries(D.games).find(([, g]) => g.object === objectId)?.[0] || null;
+  }
+  function gameBody(id) {
+    const g = D.games[id];
+    const skip = b('game-skip', id, 'Сделать без проверки · 20 минут');
+    let body = '';
+    if (id === 'scrub') {
+      const i = gameVals.frame ?? 0;
+      body = `<div class="g-screen"><div class="g-frame" id="g-frame">${esc(g.frames[i])}</div><div class="g-scan" aria-hidden="true"></div></div><input type="range" class="g-range" min="0" max="${g.frames.length - 1}" value="${i}" data-g="frame" aria-label="Перемотка записи">${b('game-check', id, 'Зафиксировать кадр', true)}`;
+    } else if (id === 'thermal') {
+      const shown = gameVals.shown || [];
+      body = `<div class="g-receipt">${g.zones.map(([z, label, value]) => `<button type="button" class="g-zone${shown.includes(z) ? ' shown' : ''}" data-a="game-zone" data-v="${z}"><small>${esc(label)}</small><span>${shown.includes(z) ? esc(value) : '░░░░░░'}</span></button>`).join('')}</div>${shown.length >= 2 ? `<p class="construct-note">${esc(g.question)}</p><div class="actions">${g.zones.filter(([z]) => shown.includes(z)).map(([z, label]) => b('game-pick', z, label)).join('')}</div>` : '<p class="muted">Нажимайте на поля, чтобы прогреть бумагу.</p>'}`;
+    } else if (id === 'overlay') {
+      const sig = 'M10 60 C30 20 45 20 55 50 S80 80 95 40 S130 20 140 55 S170 70 190 35';
+      body = `<svg class="g-sig" viewBox="0 0 200 90" aria-label="Наложение подписи"><path d="${sig}" class="base"/><path d="${sig}" class="moving" id="g-moving" transform="${sigTransform()}"/></svg>${g.sliders.map(([k, label]) => `<label class="g-label">${esc(label)}<input type="range" class="g-range" min="0" max="100" value="${gameVals[k] ?? 0}" data-g="${k}"></label>`).join('')}${b('game-check', id, 'Сверить слепок', true)}`;
+    } else if (id === 'calib') {
+      body = `<svg class="g-spectrum" viewBox="0 0 200 80" aria-label="Спектр образца"><line x1="${(g.target / 100) * 200}" y1="0" x2="${(g.target / 100) * 200}" y2="80" class="ref"/><path id="g-peak" class="peak" d="${peakPath(gameVals.peak ?? 15)}"/></svg><input type="range" class="g-range" min="0" max="100" value="${gameVals.peak ?? 15}" data-g="peak" aria-label="Настройка сканера">${b('game-check', id, 'Зафиксировать калибровку', true)}`;
+    } else if (id === 'tumbler') {
+      body = `<div class="g-dial"><i class="g-zone-ok"></i><i class="g-needle" id="g-needle"></i></div><div class="g-hits">${Array.from({ length: g.hits }, (_, i) => `<b class="${i < (gameVals.hits || 0) ? 'on' : ''}">◆</b>`).join('')}</div>${b('game-tap', id, 'Нажать в такт', true)}`;
+    }
+    return `<p>${esc(g.intro)}</p><div class="mini-game g-${id}">${body}</div><div class="actions">${skip}</div>`;
+  }
+  const peakPath = (x) => {
+    const c = (x / 100) * 200;
+    return `M0 75 L${c - 30} 72 Q${c - 10} 70 ${c} 8 Q${c + 10} 70 ${c + 30} 72 L200 75`;
+  };
+  function sigTransform() {
+    const g = D.games?.overlay;
+    if (!g) return '';
+    const [[, , ts], [, , tt]] = g.sliders;
+    const dx = ((gameVals.shift ?? 0) - ts) * 0.8,
+      rot = ((gameVals.tilt ?? 0) - tt) * 0.4;
+    return `translate(${dx} 0) rotate(${rot} 100 45)`;
+  }
+  let needleStart = 0,
+    needleRaf = 0;
+  const needlePos = (t) => {
+    const ph = ((t - needleStart) % 2400) / 2400;
+    return ph < 0.5 ? ph * 200 : (1 - ph) * 200;
+  };
+  function needleLoop() {
+    cancelAnimationFrame(needleRaf);
+    const el = panel.querySelector?.('#g-needle');
+    if (!el || view !== 'game' || focus !== 'tumbler') return;
+    el.style.left = needlePos(performance.now()) + '%';
+    needleRaf = requestAnimationFrame(needleLoop);
+  }
+  function gameDone(id) {
+    const g = D.games[id];
+    if (!run('game', { id }, { showPassage: false })) return;
+    if (g.puzzle) {
+      open('puzzle', g.puzzle);
+      return;
+    }
+    const o = D.locations[state.location]?.objects.find((x) => x.id === g.object);
+    if (o?.evidence) {
+      if (!state.evidence.includes(o.evidence) && !run('take', o.id)) return;
+      run('inspect', o.evidence, { showPassage: false });
+      open('material', o.evidence);
+    } else close();
   }
   function endingMarkup() {
     const e = D.endings?.[state.ending] || { title: 'Заключение', text: 'Ваше решение передано в Центр.' };
     const ep = pages(state.endingPassage || e.text),
       i = Math.min(endingPage, ep.length - 1);
-    return `<section class="ending"><div class="kicker">Дело LN-407 · Итог · ${i + 1} / ${ep.length}</div><h1>${esc(e.title)}</h1><p>${rich(ep[i])}</p><p class="muted">${state.evidence.length} материалов · ${state.conclusions.length} выводов · ${state.sanction ? 'санкция получена' : 'без специальной санкции'}. Решения и состояние дела сохранены.</p><div class="actions">${i > 0 ? b('ending-prev', '', '◂ Назад') : ''}${i < ep.length - 1 ? b('ending-next', '', 'Продолжить →', true) : ''}${b('panel', 'journal', 'Материалы')}${b('panel', 'system', 'Сохранения')}<a class="btn" href="../prologue/">На шаттл</a></div></section>`;
+    return `<section class="ending"><div class="kicker">Дело LN-407 · Итог · ${i + 1} / ${ep.length}</div><h1>${esc(e.title)}</h1><p>${rich(ep[i])}</p><p class="muted">${state.evidence.length} материалов · ${state.conclusions.length} выводов · ${state.sanction ? 'санкция получена' : 'без специальной санкции'}. Решения и состояние дела сохранены.</p><div class="actions">${i > 0 ? b('ending-prev', '', '◂ Назад') : ''}${i < ep.length - 1 ? b('ending-next', '', 'Продолжить →', true) : ''}${b('panel', 'journal', 'Материалы')}${b('panel', 'system', 'Сохранения')}<a class="btn" href="../prologue/">Главное меню</a></div></section>`;
   }
 
   function workbench(p) {
@@ -478,6 +574,9 @@
             const with_ = !onShip && team.includes(id);
             const where = onShip ? `на борту · ${roomName(id)}` : with_ ? 'с вами в порту' : `на шаттле · ${roomName(id)}`;
             const mood = moodOf(id);
+            const own = (D.npcs[id]?.topics || []).filter((t) => t.personal);
+            const ownOpen = E.availableTopics(state, id).filter((t) => t.personal && !state.talked.includes(t.id)).length;
+            const ownDone = own.filter((t) => state.talked.includes(t.id)).length;
             const extra =
               id === 'irena'
                 ? b('assign', 'trace', state.task?.done ? 'Сверка завершена' : state.task ? 'Поручение выполняется' : 'Поручить поиск источника ключа', !state.task, !!state.task || !onShip)
@@ -486,7 +585,7 @@
                   : id === 'rein'
                     ? b('wait', '', 'Подождать 10 минут')
                     : b('panel', 'map', 'Карта порта');
-            return `<article class="card crew-card"><img class="crew-thumb" src="${abs(`../prologue/assets/crew-${id}.webp`)}" alt=""><div><h3>${esc(D.npcs[id].name)}</h3><small>${esc(D.npcs[id].role)} · ${esc(where)}</small>${mood ? `<span class="mood mood-${mood.cls}">${esc(mood.label)}</span>` : ''}<p>${esc(notes[id])}</p><div class="actions">${b('crew-talk', id, 'Поговорить', false, !E.available(state, id))}${extra}</div></div></article>`;
+            return `<article class="card crew-card"><img class="crew-thumb" src="${abs(`../prologue/assets/crew-${id}.webp`)}" alt=""><div><h3>${esc(D.npcs[id].name)}</h3><small>${esc(D.npcs[id].role)} · ${esc(where)}</small>${mood ? `<span class="mood mood-${mood.cls}">${esc(mood.label)}</span>` : ''}${own.length ? `<span class="own-count${ownOpen ? ' fresh' : ''}">♦ Личное ${ownDone}/${own.length}${ownOpen ? ' · хочет поговорить' : ''}</span>` : ''}<p>${esc(notes[id])}</p><div class="actions">${b('crew-talk', id, 'Поговорить', false, !E.available(state, id))}${extra}</div></div></article>`;
           })
           .join('');
         body = `<p class="muted">${onShip ? 'Экипаж на борту, каждый в своём отсеке. Состав группы для выхода в порт меняют у стойки в шлюзе.' : `С вами в порту: ${team.map((id) => shortName[id]).join(' и ')}. Остальные ждут на шаттле: чтобы поговорить с ними или провести экспертизу, вернитесь на борт.`}</p><div class="crew-list">${cards}</div>${onShip ? `<div class="actions">${b('panel', 'team', 'Выбрать, кто идёт в порт')}</div>` : ''}${state.task ? `<p class="counter">${state.task.done ? 'Ирена завершила поручение; результат в деле.' : 'Ирена занята поручением. Продолжайте расследование.'}</p>` : ''}`;
@@ -503,10 +602,36 @@
           .join('')}</div><div class="actions">${b('team-confirm', '', 'Утвердить состав', true, teamPick.length !== 2)}</div>`;
         break;
       }
+      case 'scene': {
+        const sc = (D.scenes || []).find((x) => x.id === focus);
+        title = sc ? 'Канал экипажа · ' + sc.title : 'Канал экипажа';
+        if (!sc) break;
+        const chosen = state.scenes?.[sc.id];
+        const pre = sc.setupPrior?.[state.prior?.center || 'none'] || '';
+        const avatar = (id) => `<img class="avatar" src="${abs(`../prologue/assets/crew-${id}.webp`)}" alt="">`;
+        body = `<p>${esc(sc.setup)}${pre ? ' ' + esc(pre) : ''}</p><div class="argue-lines${chosen ? ' done' : ''}">${sc.lines.map(([id, t], i) => `<div class="argue-line ${i % 2 ? 'right' : 'left'}" style="--i:${i}">${avatar(id)}<div><strong>${esc(shortName[id])}</strong><p>${esc(t)}</p></div></div>`).join('')}</div>${
+          chosen
+            ? `<article class="card scene-after"><span class="kicker">Решение: ${esc(sc.options[chosen]?.label)}</span><p>${esc(sc.options[chosen]?.after)}</p></article><div class="actions">${b('close', '', 'Вернуться к делу', true)}</div>`
+            : `<div class="reply-choices">${entries(sc.options).map(([id, o]) => `<button type="button" class="btn reply-choice" data-a="scene-choose" data-v="${esc(id)}"><strong>${esc(o.label)}</strong><span>${esc(o.note)}</span></button>`).join('')}</div>`
+        }`;
+        break;
+      }
+      case 'game': {
+        const g = D.games?.[focus];
+        title = g?.title || 'Проверка';
+        if (g) body = gameBody(focus);
+        break;
+      }
       case 'diary': {
         title = 'Дневник командира';
         const sum = P && state.prior ? P.summary(state.prior) : '';
-        body = `<p class="document">${esc(sum || 'Ночь на шаттле: приказ Центра, экипаж Даля, первые следы Узла-9. Утром порт откроет реестры.')}</p><p class="muted">Записи пролога. Изменить предысторию можно в меню.</p><div class="actions"><a class="btn" href="../prologue/">Перечитать пролог</a></div>`;
+        const decided = (D.scenes || []).filter((sc) => state.scenes?.[sc.id]);
+        const personal = crewIds.flatMap((id) => (D.npcs[id]?.topics || []).filter((t) => t.personal && state.talked.includes(t.id)).map((t) => [id, t]));
+        const notes = [
+          ...decided.map((sc) => `<article class="card"><span class="kicker">Канал экипажа · ${esc(sc.title)}</span><h3>${esc(sc.options[state.scenes[sc.id]]?.label)}</h3><p>${esc(sc.options[state.scenes[sc.id]]?.after)}</p></article>`),
+          ...personal.map(([id, t]) => `<article class="card"><span class="kicker">Личное · ${esc(shortName[id])}</span><h3>${esc(t.label)}</h3></article>`),
+        ].join('');
+        body = `<p class="document">${esc(sum || 'Ночь на шаттле: приказ Центра, экипаж Даля, первые следы Узла-9. Утром порт откроет реестры.')}</p>${notes ? `<h3>Записи главы I</h3><div class="grid">${notes}</div>` : ''}<p class="muted">Записи пролога. Изменить предысторию можно в меню.</p><div class="actions"><a class="btn" href="../prologue/">Перечитать пролог</a></div>`;
         break;
       }
       case 'terminal':
@@ -535,6 +660,15 @@
           body = '<p>Сначала выберите доступное исследование.</p>';
           break;
         }
+        const calib = Object.entries(D.games || {}).find(([, g]) => g.puzzle === focus)?.[0];
+        if (calib && !state.games.includes(calib) && !state.puzzles.includes(focus) && E.has(state, p.requires || [])) {
+          title = D.games[calib].title;
+          focus = calib;
+          view = 'game';
+          gameVals = {};
+          body = gameBody(calib);
+          break;
+        }
         body = `<p>${esc(p.intro)}</p><article class="card"><h3>${esc(p.prompt)}</h3><p class="muted">${(p.requires || []).map(materialLabel).join(' · ')}</p></article>${workbench(p)}${state.puzzles.includes(focus) ? '<p class="counter">Результат записан в материалы дела.</p>' : ''}<div class="actions">${b('hint', focus, 'Попросить методическую подсказку')}${state.failed[focus] ? b('prepare', focus, 'Повторный отбор · 20 минут') : ''}</div>`;
         break;
       }
@@ -559,6 +693,10 @@
         body = '<p>Продолжайте исследование локации.</p>';
     }
     panelShell(title, body);
+    if (view === 'game' && focus === 'tumbler' && typeof requestAnimationFrame === 'function') {
+      needleStart = performance.now();
+      needleLoop();
+    }
   }
   function run(a, v, opts = {}) {
     const previous = state;
@@ -602,7 +740,8 @@
       speech = '';
       page = 0;
     }
-    if (result.passage && opts.showPassage !== false && a !== 'move') {
+    if (a === 'finish') endingPage = 0;
+    if (result.passage && opts.showPassage !== false && a !== 'move' && a !== 'finish') {
       speech = result.passage;
       speaker = a === 'topic' ? D.npcs[state.activeNpc]?.name : 'Внутренний голос';
       page = 0;
@@ -673,7 +812,8 @@
         break;
       case 'dismiss-speech':
         speech = '';
-        page = 0;
+        /* После наблюдения возвращаемся к концу ответа, где выбор вопросов и линзы */
+        page = state.activeNpc && state.topic ? 1e9 : 0;
         render();
         break;
       case 'topics':
@@ -705,6 +845,80 @@
         if (spot) open(spot[4]);
         break;
       }
+      case 'panel-scene':
+        open('scene', v);
+        break;
+      case 'scene-choose':
+        if (run('scene', { id: focus, option: v }, { showPassage: false })) {
+          paintPanel();
+          const body = panel.querySelector?.('.panel-body');
+          if (body?.scrollTo) body.scrollTo({ top: body.scrollHeight, behavior: FX?.reduceMotion ? 'auto' : 'smooth' });
+        }
+        break;
+      case 'read':
+      case 'pause':
+      case 'confront': {
+        if (!run(a, v, { showPassage: false })) break;
+        const rd = D.reads[state.activeNpc];
+        speech = a === 'read' ? rd.tells[v] : a === 'pause' ? rd.pause : rd.confront.text;
+        speaker = a === 'read' ? `${D.lenses[v].icon} ${D.lenses[v].label}` : a === 'pause' ? 'Пауза' : '';
+        if (a === 'confront') speaker = D.npcs[state.activeNpc]?.name;
+        page = 0;
+        render();
+        break;
+      }
+      case 'game-check': {
+        const g = D.games[v];
+        let okk = false;
+        if (v === 'scrub') okk = Number(gameVals.frame ?? 0) === g.answer;
+        if (v === 'overlay') okk = g.sliders.every(([k, , t]) => Math.abs((gameVals[k] ?? 0) - t) <= g.tolerance);
+        if (v === 'calib') okk = Math.abs((gameVals.peak ?? 15) - g.target) <= g.tolerance;
+        if (okk) gameDone(v);
+        else {
+          FX?.sfx.fail();
+          FX?.haptic(true, [80]);
+          notify(v === 'scrub' ? 'В этом кадре носилок нет. Перематывайте дальше.' : v === 'overlay' ? 'Края пока не сходятся. Двигайте оба регулятора.' : 'Пик не лёг на опорную линию.');
+        }
+        break;
+      }
+      case 'game-zone':
+        gameVals.shown = [...new Set([...(gameVals.shown || []), v])];
+        FX?.sfx.click(false);
+        paintPanel();
+        break;
+      case 'game-pick':
+        if (v === D.games.thermal.answer) gameDone('thermal');
+        else {
+          FX?.sfx.fail();
+          notify('Это поле не проверяет время. Что именно утверждала Мира?');
+        }
+        break;
+      case 'game-tap': {
+        const g = D.games.tumbler;
+        const pos = needlePos(performance.now());
+        if (pos >= 36 && pos <= 64) {
+          gameVals.hits = (gameVals.hits || 0) + 1;
+          FX?.sfx.click(true);
+          FX?.haptic(true, 25);
+        } else {
+          gameVals.hits = 0;
+          FX?.sfx.fail();
+          FX?.haptic(true, [90]);
+          notify('Мимо такта. Счёт сброшен.');
+        }
+        if (gameVals.hits >= g.hits) gameDone('tumbler');
+        else {
+          const hits = panel.querySelector?.('.g-hits');
+          if (hits) hits.innerHTML = Array.from({ length: g.hits }, (_, i) => `<b class="${i < gameVals.hits ? 'on' : ''}">◆</b>`).join('');
+        }
+        break;
+      }
+      case 'game-skip':
+        if (D.games[v]) {
+          if (!run('game', { id: v, skip: true }, { showPassage: false })) break;
+          gameDone(v);
+        }
+        break;
       case 'team-toggle':
         teamPick = teamPick.includes(v) ? teamPick.filter((x) => x !== v) : [...teamPick, v].slice(-2);
         paintPanel();
@@ -728,6 +942,15 @@
         break;
       case 'object': {
         const o = D.locations[state.location].objects.find((x) => x.id === v);
+        const gid = D.games ? gameFor(v) : null;
+        if (o?.evidence && gid && !state.games.includes(gid) && !state.evidence.includes(o.evidence)) {
+          if (!E.has(state, o.requires || [])) {
+            run('take', v);
+            break;
+          }
+          open('game', gid);
+          break;
+        }
         if (o?.evidence) {
           if (!state.evidence.includes(o.evidence) && !run('take', v)) break;
           run('inspect', o.evidence, { showPassage: false });
@@ -925,6 +1148,17 @@
         render();
         break;
     }
+  });
+  document.addEventListener('input', (ev) => {
+    const k = ev.target?.dataset?.g;
+    if (!k) return;
+    gameVals[k] = Number(ev.target.value);
+    if (k === 'frame') {
+      const f = panel.querySelector('#g-frame');
+      if (f) f.textContent = D.games.scrub.frames[gameVals.frame];
+      FX?.sfx.click(false);
+    } else if (k === 'peak') panel.querySelector('#g-peak')?.setAttribute('d', peakPath(gameVals.peak));
+    else panel.querySelector('#g-moving')?.setAttribute('transform', sigTransform());
   });
   panel.addEventListener('close', () => {
     view = '';

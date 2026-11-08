@@ -35,6 +35,11 @@
         prior: null,
         ship: "office",
         team: null,
+        bonds: { mara: 1, corvin: 1, irena: 1, rein: 1 },
+        scenes: {},
+        reads: [],
+        caught: [],
+        games: [],
       },
       prior,
     );
@@ -66,6 +71,7 @@
     s.trust.mira = p.mira === "full" ? 2 : p.mira === "shut" ? -1 : 1;
     if (p.mira === "full") add(s.evidence, "witness");
     if (p.center === "mercy") s.heat = 1;
+    for (const id of crewIds) s.bonds[id] = p.mood[id] === "high" ? 2 : p.mood[id] === "low" ? 0 : 1;
     return s;
   }
   /* Шаттл из пролога: отсеки и двое из экипажа, которые идут с командиром в порт */
@@ -77,8 +83,27 @@
     return ["corvin", "rein"];
   }
   function taskTime(s) {
+    const b = s.bonds?.irena;
+    if (Number.isFinite(b)) return b >= 2 ? 3 : b <= 0 ? 5 : 4;
     const m = s.prior?.mood?.irena;
     return m === "high" ? 3 : m === "low" ? 5 : 4;
+  }
+  /* Связь с экипажем: из пролога, личных разговоров и решений на канале */
+  function moodOf(s, id) {
+    const b = s.bonds?.[id] ?? 1;
+    return b >= 2 ? "high" : b <= 0 ? "low" : "mid";
+  }
+  const lensIds = ["pulse", "eyes", "voice"];
+  function topicText(s, t) {
+    if (!t) return "";
+    let text = t.text || "";
+    if (t.found && t.foundText && s.prior?.found?.includes(t.found)) text += " " + t.foundText;
+    if (t.centerText && s.prior?.center && t.centerText[s.prior.center]) text += " " + t.centerText[s.prior.center];
+    return text;
+  }
+  function pendingScene(s) {
+    if (s.ending) return null;
+    return (D().scenes || []).find((sc) => !s.scenes?.[sc.id] && sc.when(s, known)) || null;
   }
   function sanctionNeed(s) {
     return s.prior?.center === "law" ? 2 : 3;
@@ -103,6 +128,11 @@
     s.ship = shipRooms.includes(raw.ship) ? raw.ship : "office";
     const team = Array.isArray(raw.team) ? [...new Set(raw.team.filter((id) => crewIds.includes(id)))] : [];
     s.team = team.length === 2 ? team : null;
+    if (raw.bonds && typeof raw.bonds === "object")
+      for (const id of crewIds) if (Number.isSafeInteger(raw.bonds[id])) s.bonds[id] = Math.max(-3, Math.min(6, raw.bonds[id]));
+    if (raw.scenes && typeof raw.scenes === "object")
+      for (const [k, v] of Object.entries(raw.scenes)) if (typeof v === "string" && (!d?.scenes || d.scenes.some((x) => x.id === k))) s.scenes[k] = v;
+    for (const k of ["reads", "caught", "games"]) if (Array.isArray(raw[k])) s[k] = [...new Set(raw[k].filter((x) => typeof x === "string"))];
     return s;
   }
   function unlocked(s) {
@@ -129,7 +159,7 @@
     return !!n && (n.location === s.location || (s.location === "office" && n.location === "office")) && has(s, n.requires || []);
   }
   function availableTopics(s, npc) {
-    return (D().npcs[npc]?.topics || []).filter((t) => has(s, t.requires || []));
+    return (D().npcs[npc]?.topics || []).filter((t) => has(s, t.requires || []) && (t.minBond == null || (s.bonds?.[npc] ?? 1) >= t.minBond));
   }
   function endReady(s, id) {
     if (id === "dismiss") return true;
@@ -184,17 +214,70 @@
         s.team = pick;
         return win("Состав группы утверждён: " + pick.map((id) => d.npcs[id]?.name || id).join(" и ") + ".");
       }
+      case "scene": {
+        const sc = (d.scenes || []).find((x) => x.id === value?.id);
+        if (!sc) return fail("Разговор экипажа недоступен.");
+        if (s.scenes[sc.id]) return fail("Решение уже принято.");
+        if (!sc.when(s, known)) return fail("Экипажу пока нечего обсуждать.");
+        const o = sc.options?.[value.option];
+        if (!o) return fail("Выберите решение.");
+        s.scenes[sc.id] = value.option;
+        for (const [id, v] of Object.entries(o.bonds || {})) if (crewIds.includes(id)) s.bonds[id] += v;
+        for (const [id, v] of Object.entries(o.trust || {})) s.trust[id] = (s.trust[id] || 0) + v;
+        if (o.heat) s.heat += o.heat;
+        const up = Object.entries(o.bonds || {}).filter(([, v]) => v > 0).map(([id]) => d.npcs[id]?.name.split(" ")[0]);
+        const down = Object.entries(o.bonds || {}).filter(([, v]) => v < 0).map(([id]) => d.npcs[id]?.name.split(" ")[0]);
+        return win(
+          [up.length ? "Ближе к вам: " + up.join(", ") + "." : "", down.length ? "Отдалились: " + down.join(", ") + "." : ""].filter(Boolean).join(" · ") || "Решение записано в дневник.",
+          o.after || "",
+        );
+      }
+      case "read": {
+        const r = d.reads?.[s.activeNpc];
+        if (!r) return fail("Этого человека не прочитать: он не скрывает ничего важного для дела.");
+        if (!lensIds.includes(value)) return fail("Выберите, на что смотреть.");
+        if (!s.talked.includes(r.topic)) return fail("Сначала задайте вопрос, ответ на который хотите проверить.");
+        const key = s.activeNpc + ":" + value;
+        const hit = value === r.lens;
+        if (!s.reads.includes(key)) add(s.reads, key);
+        return win(hit ? "Несоответствие замечено. Его можно предъявить." : "", r.tells[value]);
+      }
+      case "pause": {
+        const r = d.reads?.[s.activeNpc];
+        if (!r || !s.talked.includes(r.topic)) return fail("Пауза ничего не даст: собеседнику пока нечего добавить.");
+        const key = s.activeNpc + ":pause";
+        if (s.reads.includes(key)) return win("", r.pause);
+        add(s.reads, key);
+        return win("Вы выдержали паузу. Собеседник заполнил её сам.", r.pause, 1);
+      }
+      case "confront": {
+        const r = d.reads?.[s.activeNpc];
+        if (!r || !s.reads.includes(s.activeNpc + ":" + r.lens)) return fail("Нечего предъявить: сначала заметьте несоответствие.");
+        if (s.caught.includes(s.activeNpc)) return win("", r.confront.text);
+        add(s.caught, s.activeNpc);
+        (r.confront.gives || []).forEach((id) => add(s.evidence, id));
+        if (s.activeNpc in s.trust) s.trust[s.activeNpc] += r.confront.trust ?? 0;
+        return win("Собеседник уличён." + (r.confront.gives?.length ? " Новые сведения внесены в журнал." : " Показание записано."), r.confront.text, 1);
+      }
+      case "game": {
+        const g = d.games?.[value?.id];
+        if (!g) return fail("Такой проверки нет.");
+        if (s.games.includes(value.id)) return win("");
+        add(s.games, value.id);
+        if (value.skip) return win("Проверка проведена грубо: ушло двадцать минут.", "", 2);
+        return win(g.done || "Проверка пройдена.");
+      }
       case "end-talk":
         s.activeNpc = null;
         s.topic = null;
         return win();
       case "topic": {
         const n = d.npcs[s.activeNpc];
-        const t = n?.topics?.find((t) => t.id === value);
-        if (!t || !has(s, t.requires || [])) return fail("Для этого вопроса пока нет основания.");
+        const t = availableTopics(s, s.activeNpc).find((t) => t.id === value);
+        if (!t) return fail("Для этого вопроса пока нет основания.");
         if (s.talked.includes(value)) {
           s.topic = value;
-          return win("Вы возвращаетесь к записанному ответу.", t.text);
+          return win("Вы возвращаетесь к записанному ответу.", topicText(s, t));
         }
         if (t.style === "pressure" && s.heat >= 3) return fail("Собеседник требует присутствия представителя. Измените условия разговора.");
         add(s.talked, value);
@@ -204,7 +287,9 @@
           s.heat++;
           s.trust[s.activeNpc] = (s.trust[s.activeNpc] || 0) - 1;
         }
-        return win(t.gives?.length ? "Новые сведения внесены в журнал." : "", t.text, t.time || 1);
+        if (t.bond && crewIds.includes(s.activeNpc)) s.bonds[s.activeNpc] += t.bond;
+        const msg = t.personal ? "Личный разговор: " + (n.name.split(" ")[0]) + " доверяет вам больше." : t.gives?.length ? "Новые сведения внесены в журнал." : "";
+        return win(msg, topicText(s, t), t.time || 1);
       }
       case "take": {
         const o = d.locations[s.location].objects.find((o) => o.id === value);
@@ -443,6 +528,7 @@
         if (s.injury >= 2)
           s.endingPassage +=
             "\n\nКорвин ждёт у шлюза с хирургическим набором. «Вы ещё способны стоять, — говорит он. — Это не значит, что внутри ничего не порвано». На следующий выход я пойду после лечения, а не вместо него.";
+        if (typeof d.epilogue === "function") s.endingPassage += "\n\n" + d.epilogue(s, value);
         return win("Дело завершено.", s.endingPassage, 1);
       default:
         return fail("Действие недоступно.");
@@ -467,5 +553,8 @@
     teamOf,
     shipRooms,
     crewRoom,
+    moodOf,
+    topicText,
+    pendingScene,
   };
 })();

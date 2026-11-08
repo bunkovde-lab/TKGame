@@ -140,3 +140,46 @@ button.card:active { transform: scale(.98); }
   .ship-exits::-webkit-scrollbar { display: none; }
   .ship-exits .exit { flex: none; }
 }
+
+/* ── Экипаж: личные разговоры, канал, чтение собеседника ── */
+.choice.personal { border-color: #e5b87966; }
+.choice.personal b { color: var(--gold); }
+.own-count { display: inline-block; margin: .2rem 0 0 .3rem; font-size: .72rem; color: #c9b48a; }
+.own-count.fresh { color: var(--gold); animation: own-pulse 2s ease-in-out infinite; }
+@keyframes own-pulse { 50% { opacity: .55; } }
+.btn.exit.crew-call { border-color: var(--gold); color: var(--gold); animation: own-pulse 1.6s ease-in-out infinite; }
+.conversation .lens-row { align-items: center; width: 100%; }
+.lens-hint { font-size: .68rem; letter-spacing: .08em; text-transform: uppercase; color: #9aa6b8; margin-right: .2rem; }
+.btn.lens-pause.on { background: #3a3220 !important; border-color: #e5b879 !important; color: #ffe9c2 !important; }
+.btn.confront { width: 100%; margin-top: .35rem; }
+.btn.confront.done { opacity: .7; }
+.scene-after { margin-top: .6rem; border-color: #e5b87966; }
+
+/* ── Мини-игры ── */
+.mini-game { display: grid; gap: .6rem; margin: .5rem 0; }
+.g-range { width: 100%; accent-color: var(--gold); min-height: 32px; }
+.g-label { display: grid; gap: .2rem; font-size: .78rem; color: #c9d3df; }
+.g-screen { position: relative; overflow: hidden; border-radius: .5rem; border: 1px solid var(--edge); background: #0b1117 url('../prologue/assets/scene-cockpit.webp') center / cover; min-height: 7.5rem; display: grid; place-items: end start; }
+.g-frame { position: relative; z-index: 1; margin: .5rem; padding: .25rem .5rem; background: #000c; color: #9effc4; font: .9rem/1.3 ui-monospace, monospace; border-radius: .25rem; }
+.g-scan { position: absolute; inset: 0; background: repeating-linear-gradient(0deg, #0000 0 3px, #00000055 3px 4px); }
+.g-receipt { display: grid; gap: .35rem; padding: .7rem; background: #efe6d2; border-radius: .35rem; color: #2a241c; max-width: 22rem; }
+.g-zone { display: grid; grid-template-columns: 8rem 1fr; text-align: left; background: none; border: 0; border-bottom: 1px dashed #b9ad94; padding: .35rem .1rem; color: inherit; font: .9rem ui-monospace, monospace; cursor: pointer; }
+.g-zone span { color: #b9ad94; transition: color .6s; }
+.g-zone.shown span { color: #2a241c; }
+.g-sig, .g-spectrum { width: 100%; max-width: 30rem; background: #101820; border: 1px solid var(--edge); border-radius: .5rem; }
+.g-sig path { fill: none; stroke-width: 2.4; stroke-linecap: round; }
+.g-sig .base { stroke: #7fb4ff; }
+.g-sig .moving { stroke: #e5b879; opacity: .85; }
+.g-spectrum .ref { stroke: #6fdc9f; stroke-width: 1.5; stroke-dasharray: 4 3; }
+.g-spectrum .peak { fill: none; stroke: #e5b879; stroke-width: 2; }
+.g-dial { position: relative; height: 2.4rem; border-radius: 99px; background: #101820; border: 1px solid var(--edge); overflow: hidden; }
+.g-zone-ok { position: absolute; left: 36%; width: 28%; top: 0; bottom: 0; background: #6fdc9f33; border-left: 1px solid #6fdc9f; border-right: 1px solid #6fdc9f; }
+.g-needle { position: absolute; top: 0; bottom: 0; left: 0; width: 3px; margin-left: -1px; background: #ffd27f; box-shadow: 0 0 8px #ffd27f; }
+.g-hits { display: flex; gap: .4rem; font-size: 1.1rem; color: #3b4654; }
+.g-hits b.on { color: #6fdc9f; }
+@media (prefers-reduced-motion: reduce) { .own-count.fresh, .btn.exit.crew-call { animation: none; } }
+.conversation .reply .lens-row { display: flex; flex-wrap: wrap; gap: .3rem; margin: 0 0 .15rem; }
+.conversation .reply .lens-row .btn { flex: 0 0 auto; min-height: 34px; padding: .25rem .6rem; text-align: center; }
+.conversation .reply .btn.confront { text-align: center; }
+.argue-lines.done .argue-line { animation: none; }
+@media (max-width: 480px) { .conversation .reply .lens-hint { display: none; } .conversation .reply .lens-row .btn { padding: .25rem .5rem; font-size: .74rem; } }
