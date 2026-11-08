@@ -115,7 +115,7 @@ button.card:active { transform: scale(.98); }
 .hero-line .tw::before { content: "— "; color: var(--gold); }
 
 /* Экипаж: спутники стоят в глубине локации, по перспективе и свету арта */
-.crew-figure { position: absolute; z-index: 1; left: var(--x); top: calc(var(--y) - var(--h)); height: var(--h); aspect-ratio: 150 / 435; transform: translateX(-50%); padding: 0; border: 0; background: none; cursor: pointer; }
+.crew-figure { position: absolute; z-index: 1; left: var(--x); top: calc(var(--y) - var(--h)); height: var(--h); aspect-ratio: var(--ratio-fig, 150 / 435); transform: translateX(-50%); padding: 0; border: 0; background: none; cursor: pointer; }
 .crew-figure img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: bottom; pointer-events: none; filter: var(--light) drop-shadow(0 0 1px #0008); transition: filter .3s; }
 .crew-figure::before { content: ""; position: absolute; left: 50%; bottom: -1.5%; width: 120%; height: 6%; transform: translateX(-50%); background: radial-gradient(ellipse at center, #000c 0%, #0006 45%, #0000 72%); pointer-events: none; }
 .crew-figure.far img { filter: var(--light) blur(.35px) brightness(.9); }
