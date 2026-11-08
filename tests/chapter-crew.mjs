@@ -145,4 +145,28 @@ click('game-check','calib');assert.ok(!st().games.includes('calib'));
 click('game-skip','calib');assert.ok(st().games.includes('calib'));assert.match(panel.innerHTML,/lab-table/);
 click('panel','diary');assert.match(panel.innerHTML,/Канал экипажа · Седьмая строка/);
 click('panel','crew');assert.match(panel.innerHTML,/Личное 0\/2/);
+
+// Режимы, вечер, дуэль, память порта, табло
+{
+  const g2=game(clone(fresh));g2.do('mode','detective');assert.equal(g2.state.mode,'detective');g2.do('mode','bad',false);
+  g2.do('move','office');const t=g2.state.tick;g2.do('deduce',{id:'transfer',evidence:['manifest']});assert.equal(g2.state.tick,t+2,'следователь платит за ошибку дороже');
+  g2.do('evening','mara',false);
+  g2.state.tick=110;const b0=g2.state.bonds.rein;const ev=g2.do('evening','rein');assert.equal(g2.state.bonds.rein,b0+1);assert.match(ev.passage,/Рейн:/);
+  g2.do('evening','mara',false);assert.equal(E.restore(clone(g2.state)).evening,'rein');assert.equal(E.restore(clone(g2.state)).mode,'detective');
+  g2.do('duel','lost',false);g2.go('registry');const h=g2.state.heat;g2.do('duel','lost');assert.equal(g2.state.heat,h+1);
+  for(const c of D.duel.claims)for(const e of c.counters)assert.ok(D.evidence[e],`duel counter ${e}`);
+  const m=clone(fresh);m.talked=['courier-camera'];m.caught=['courier'];assert.match(D.memoryLine(m,'courier'),/юлю/);
+  m.caught=[];m.talked.push('courier-pressure');assert.match(D.memoryLine(m,'courier'),/тише/);
+  assert.equal(D.memoryLine(fresh,'courier'),'');
+  assert.ok(D.news({...clone(fresh),sanction:true}).some(x=>/санкцию/.test(x)));
+}
+// Интерфейс: доска улик и дуэль
+{
+  const st2=ui.CHAPTER_ENGINE.restore(st());st2.location='office';st2.activeNpc=null;storage.set('tkgame-chapter1-auto-v1',JSON.stringify(st2));
+  click('deduction','forgery');assert.match(panel.innerHTML,/class="board"/);assert.match(panel.innerHTML,/class="pin/);
+  click('select-evidence','manifest');assert.match(panel.innerHTML,/pin tied/);
+  const t=st().tick;click('submit-deduction','forgery');assert.ok(st().tick>t);assert.ok(!st().conclusions.includes('forgery'));
+  const s3=st();s3.location='registry';s3.conclusions.push('forgery');s3.evidence.push(...D.duel.claims.flatMap(c=>c.counters),'orderchain');s3.evidence=[...new Set(s3.evidence)];
+  storage.set('tkgame-chapter1-auto-v1',JSON.stringify(s3));
+}
 console.log('chapter crew ok');

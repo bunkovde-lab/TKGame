@@ -117,6 +117,8 @@
     endingPage = 0,
     workStage = 0;
   let openedIntro = false;
+  let duel = null,
+    eveningText = '';
   let sceneAsked = '',
     gameVals = {};
   try {
@@ -250,7 +252,7 @@
     let n = state.activeNpc && D.npcs[state.activeNpc];
     const activeTopics = n ? E.availableTopics(state, state.activeNpc) : [];
     const current = activeTopics.find((t) => t.id === state.topic);
-    let text = speech || (current && (E.topicText ? E.topicText(state, current) : current.text)) || (P && n ? P.greeting(state, state.activeNpc, n) : n?.greeting) || '';
+    let text = speech || (current && (E.topicText ? E.topicText(state, current) : current.text)) || (n ? [D.memoryLine?.(state, state.activeNpc), P ? P.greeting(state, state.activeNpc, n) : n.greeting].filter(Boolean).join('\n\n') : '') || '';
     let who = speech ? speaker : n?.name;
     const turns = n ? turnPages(text) : pages(text).map((t) => ({ who: '', text: t }));
     const ps = turns.map((t) => t.text),
@@ -322,6 +324,7 @@
         if (activeTopics.length > 4) tools += b('topics', '', `Другие темы · ${topicPage + 1}/${Math.ceil(activeTopics.length / 4)}`);
       }
       if (last && !speech) reply = readTools() + reply;
+      if (last && !speech && state.activeNpc === 'chief' && !state.interview && D.duel) reply = `<button type="button" class="btn primary confront" data-a="duel-open" data-v="">⚖ Официальный допрос: предъявить противоречия</button>` + reply;
       else if (last) tools = readTools() + tools;
       const mood = moodOf(state.activeNpc);
       const talkEnter = state.activeNpc !== lastNpc && !FX?.reduceMotion ? ' enter' : '';
@@ -344,7 +347,8 @@
           .join('')
       : '';
     const scene = E.pendingScene ? E.pendingScene(state) : null;
-    const sceneBtn = scene ? `<button type="button" class="btn exit crew-call" data-a="panel-scene" data-v="${esc(scene.id)}"><span aria-hidden="true">📡</span> Экипаж на связи</button>` : '';
+    const eveningBtn = onShip && E.eveningOpen?.(state) && D.evenings ? `<button type="button" class="btn exit crew-call" data-a="panel" data-v="evening"><span aria-hidden="true">☕</span> Полчаса с экипажем</button>` : '';
+    const sceneBtn = (eveningBtn || '') + (scene ? `<button type="button" class="btn exit crew-call" data-a="panel-scene" data-v="${esc(scene.id)}"><span aria-hidden="true">📡</span> Экипаж на связи</button>` : '');
     const exits =
       !text && !thoughtBox
         ? `<nav class="exits${onShip ? ' ship-exits' : ''}" aria-label="Переходы">${sceneBtn}${onShip ? shipExits : `<button type="button" class="btn exit" data-a="panel" data-v="map"><span aria-hidden="true">↗</span> Перемещение</button><button type="button" class="btn exit" data-a="move" data-v="office"><span aria-hidden="true">↗</span> На шаттл</button>${encounters}`}</nav>`
@@ -352,7 +356,7 @@
     const placeName = interview ? 'Кабинет начальника порта' : onShip ? room.name : l.name;
     const kicker = `${onShip ? 'Шаттл · у причала' : 'Лунный арбитраж'} · ${E.period(state)}${state.sanction ? ' · Санкция Центра' : ''}`;
     const sceneKey = `${state.location}:${onShip ? state.ship : ''}:${interview}`;
-    app.innerHTML = `<main class="game">${topBar()}<section class="scene${n ? ' scene-speaking' : ''}${onShip && room.crew ? ' has-crew' : ''}${sceneEnter(sceneKey)}" aria-label="${esc(placeName)}" style="--art:url('${abs(artFile)}')"><div class="pano"><div class="pano-track" style="--ratio:${ratio}"><div class="scene-art"></div>${companions}${!n && !text ? actors + objects : ''}</div></div><i class="pano-edge left" aria-hidden="true">‹</i><i class="pano-edge right" aria-hidden="true">›</i><canvas class="dust-fx" aria-hidden="true"></canvas><div class="bars top-only" aria-hidden="true"><i></i></div><header><div class="kicker">${esc(kicker)}</div><h1>${esc(placeName)}</h1>${!n ? `<div class="goal"><span>Цель</span>${esc(objective())}</div>` : ''}</header>${dialog}${thoughtBox}${exits}${cinema ? `<div class="cinema" style="--combat-art:url('${abs(`assets/combat-${cinemaArt}.webp`)}')"><div class="kicker">Хищный расчёт · Последствия</div><p>${esc(cinema)}</p>${b('cinema-done', '', 'Оценить последствия', true)}</div>` : ''}${state.ending ? endingMarkup() : ''}</section></main>`;
+    app.innerHTML = `<main class="game">${topBar()}<section class="scene${n ? ' scene-speaking' : ''}${onShip && room.crew ? ' has-crew' : ''}${sceneEnter(sceneKey)}" aria-label="${esc(placeName)}" style="--art:url('${abs(artFile)}')"><div class="pano"><div class="pano-track" style="--ratio:${ratio}"><div class="scene-art"></div>${companions}${!n && !text ? actors + objects : ''}</div></div><i class="pano-edge left" aria-hidden="true">‹</i><i class="pano-edge right" aria-hidden="true">›</i><canvas class="dust-fx" aria-hidden="true"></canvas><div class="bars top-only" aria-hidden="true"><i></i></div><header><div class="kicker">${esc(kicker)}</div><h1>${esc(placeName)}</h1>${!n ? `<div class="goal"><span>Цель</span>${esc(objective())}</div>` : ''}${!n && !text && D.news && ['port', 'waiting', 'registry'].includes(state.location) ? `<div class="news" aria-label="Табло порта"><span>Табло порта</span><div class="news-window"><div class="news-track">${D.news(state).map((h) => `<b>${esc(h)}</b>`).join('')}${D.news(state).map((h) => `<b aria-hidden="true">${esc(h)}</b>`).join('')}</div></div></div>` : ''}</header>${dialog}${thoughtBox}${exits}${cinema ? `<div class="cinema" style="--combat-art:url('${abs(`assets/combat-${cinemaArt}.webp`)}')"><div class="kicker">Хищный расчёт · Последствия</div><p>${esc(cinema)}</p>${b('cinema-done', '', 'Оценить последствия', true)}</div>` : ''}${state.ending ? endingMarkup() : ''}</section></main>`;
     if (FX) {
       FX.setupPano(app, sceneKey, focusX, Boolean(n), notify);
       FX.startDust(app);
@@ -476,6 +480,46 @@
   function materialLabel(id) {
     return D.evidence[id]?.title || D.conclusions[id]?.title || id;
   }
+  /* Доска улик: нити от материалов к версии. Неверная связка рвётся */
+  let boardHint = '';
+  function boardBody(id) {
+    const c = D.conclusions[id];
+    const need = c.requires.length;
+    const mode = state.mode || 'normal';
+    const count = mode === 'detective' ? 'Сколько нитей нужно, решаете сами.' : `Нужно ${need} независимых материала.`;
+    const pins = state.evidence
+      .filter((e) => D.evidence[e])
+      .map((e, i) => {
+        const tied = selection.includes(e);
+        const hint = boardHint === e ? ' hinted' : '';
+        return `<button type="button" class="pin${tied ? ' tied' : ''}${hint}" data-a="select-evidence" data-v="${esc(e)}" aria-pressed="${tied}" style="--r:${((i * 37) % 7) - 3}deg"><img src="assets/detail-${esc(D.evidence[e].detail || 'manifest')}.webp" alt=""><span>${esc(materialLabel(e))}</span><i aria-hidden="true"></i></button>`;
+      })
+      .join('');
+    return `<div class="board" id="board"><svg class="threads" aria-hidden="true"></svg><div class="board-claim" id="board-claim"><small>Версия</small><b>${esc(c.title)}</b><span>${selection.length} ${selection.length === 1 ? 'нить' : selection.length > 1 && selection.length < 5 ? 'нити' : 'нитей'} · ${esc(count)}</span></div><div class="board-pins">${pins}</div></div><p class="muted">Нажмите на материал, чтобы протянуть нить к версии. Показания сами по себе не заменяют проверку.</p><div class="actions">${b('submit-deduction', id, 'Проверить связку', true, !selection.length)}${b('board-clear', '', 'Снять нити')}${b('panel', 'deductions', 'Другие версии')}</div>`;
+  }
+  function scrollPanelTop() {
+    for (const el of [panel, panel.querySelector?.('.panel-body')]) if (el?.scrollTo) el.scrollTo({ top: 0, behavior: 'auto' });
+  }
+  function drawThreads(snap = false) {
+    const board = panel.querySelector?.('#board');
+    if (!board || !board.getBoundingClientRect) return;
+    const svg = board.querySelector('.threads'),
+      claim = board.querySelector('#board-claim');
+    const br = board.getBoundingClientRect(),
+      cr = claim.getBoundingClientRect();
+    svg.setAttribute('viewBox', `0 0 ${br.width} ${br.height}`);
+    const cx = cr.left - br.left + cr.width / 2,
+      cy = cr.top - br.top + cr.height;
+    svg.innerHTML = [...board.querySelectorAll('.pin.tied i')]
+      .map((pinEl) => {
+        const r = pinEl.getBoundingClientRect();
+        const x = r.left - br.left + r.width / 2,
+          y = r.top - br.top + r.height / 2;
+        const sag = Math.min(40, Math.abs(x - cx) * 0.15 + 12);
+        return `<path class="${snap ? 'snap' : ''}" d="M${x} ${y} Q${(x + cx) / 2} ${(y + cy) / 2 + sag} ${cx} ${cy}"/>`;
+      })
+      .join('');
+  }
   function evidenceChoices(ids) {
     return `<div class="evidence-list">${ids.map((id) => `<button class="evidence-choice ${selection.includes(id) ? 'selected' : ''}" data-a="select-evidence" data-v="${esc(id)}" aria-pressed="${selection.includes(id)}">${selection.includes(id) ? '◆' : '◇'} ${esc(materialLabel(id))}</button>`).join('')}</div>`;
   }
@@ -557,7 +601,7 @@
       case 'deductions':
         title = 'Рабочий стол · Карта версий';
         if (focus && D.conclusions[focus]) {
-          body = `<h3>${esc(D.conclusions[focus].title)}</h3><p>Выберите независимые материалы, которые вместе обосновывают эту версию. Показания сами по себе не заменяют проверку.</p>${evidenceChoices(state.evidence)}<div class="actions">${b('submit-deduction', focus, 'Проверить обоснование', true)}${b('panel', 'deductions', 'Другие версии')}</div>`;
+          body = boardBody(focus);
         } else
           body = `<p>Здесь гипотеза становится выводом только после сопоставления подходящих материалов. Неподтверждённая версия не открывает итог дела.</p><div class="grid">${entries(
             D.conclusions,
@@ -647,12 +691,45 @@
       }
       case 'terminal':
         title = 'Центр · Оперативное согласование';
-        body = `<p>Запрос на принудительное изъятие реестра и допрос руководителя порта. Представьте проверяемые основания и связь с юрисдикцией. Полученная санкция ограничена этой операцией.</p>${state.sanction ? '<article class="card"><h3>Специальная санкция получена</h3><p>Разрешены изъятие административного ключа и официальный допрос. Мера не разрешает внеслужебное насилие.</p></article>' : `${evidenceChoices(state.evidence)}${b('submit-sanction', '', 'Отправить выбранное обоснование', true)}`}<h3>Официальный допрос</h3><p>Убедитесь, что знаете противоречие и можете подтвердить слова независимым материалом. Давление способно породить удобную ложь.</p><div class="actions">${b('interview', 'rapport', 'Дать защиту и выслушать')}${b('interview', 'evidence', 'Предъявить противоречие')}${b('interview', 'pressure', 'Пригрозить последствиями')}</div><h3>Заключение по делу</h3><p>Доступность итогового решения определяется качеством расследования и сохранёнными людьми и материалами.</p><div class="actions">${entries(
+        body = `<p>Запрос на принудительное изъятие реестра и допрос руководителя порта. Представьте проверяемые основания и связь с юрисдикцией. Полученная санкция ограничена этой операцией.</p>${state.sanction ? '<article class="card"><h3>Специальная санкция получена</h3><p>Разрешены изъятие административного ключа и официальный допрос. Мера не разрешает внеслужебное насилие.</p></article>' : `${evidenceChoices(state.evidence)}${b('submit-sanction', '', 'Отправить выбранное обоснование', true)}`}<h3>Официальный допрос</h3><p>Убедитесь, что знаете противоречие и можете подтвердить слова независимым материалом. Давление способно породить удобную ложь.</p><div class="actions">${b('interview', 'rapport', 'Дать защиту и выслушать')}${b('duel-open', '', 'Предъявить противоречие')}${b('interview', 'pressure', 'Пригрозить последствиями')}</div><h3>Заключение по делу</h3><p>Доступность итогового решения определяется качеством расследования и сохранёнными людьми и материалами.</p><div class="actions">${entries(
           D.endings,
         )
           .map(([id, e]) => b('finish', id, e.title, false, !E.endReady(state, id)))
           .join('')}</div>`;
         break;
+      case 'duel': {
+        title = 'Официальный допрос · Халь Восс';
+        const max = D.duel.composure[state.mode || 'normal'] || 3;
+        const claim = D.duel.claims[duel.order[duel.round]];
+        const bar = Array.from({ length: max + 2 }, (_, i) => `<i class="${i < duel.composure ? 'on' : ''}${i >= max ? ' over' : ''}"></i>`).join('');
+        const lens = claim && (duel.read || state.mode === 'family') ? `<div class="lens-strip ${claim.lens}${duel.read ? ' hit' : ''}"><b>${D.lenses[claim.lens].icon}</b><span>${esc(claim.tell)}</span></div>` : '';
+        body = `<img class="encounter-art duel-art" src="assets/scene-interview.webp" alt="Кабинет начальника порта"><div class="duel-head"><span>Самообладание Восса</span><div class="composure">${bar}</div></div>${duel.log ? `<p class="duel-log">${esc(duel.log)}</p>` : ''}${
+          claim
+            ? `<article class="card duel-claim"><span class="kicker">Восс · утверждение ${duel.round + 1}</span><p>${esc(claim.text)}</p></article>${lens}<div class="actions">${duel.read || state.mode === 'family' ? '' : b('duel-read', '', `${D.lenses[claim.lens].icon} Прочитать Восса`)}</div><p class="construct-note">Предъявите материал, который опровергает это утверждение.</p><div class="evidence-list duel-list">${state.evidence
+                .filter((e) => D.evidence[e])
+                .map((e) => `<button class="evidence-choice" data-a="duel-show" data-v="${esc(e)}">◇ ${esc(materialLabel(e))}</button>`)
+                .join('')}</div>`
+            : ''
+        }`;
+        break;
+      }
+      case 'evening': {
+        title = 'Вечер на шаттле';
+        if (state.evening) {
+          const lines = turnPages(eveningText || (typeof D.evenings[state.evening] === 'function' ? D.evenings[state.evening](state, E.known) : D.evenings[state.evening]))
+            .map((t) => {
+              const hero = t.who === 'Герой';
+              const id = crewIds.find((c) => shortName[c] === t.who) || state.evening;
+              return `<div class="argue-line ${hero ? 'right' : 'left'}">${hero ? '' : `<img class="avatar" src="${abs(`../prologue/assets/crew-${id}.webp`)}" alt="">`}<div><strong>${esc(hero ? 'Командир' : t.who || '')}</strong><p>${esc(t.text)}</p></div></div>`;
+            })
+            .join('');
+          body = `<div class="argue-lines done">${lines}</div><div class="actions">${b('close', '', 'Вернуться к делу', true)}</div>`;
+        } else
+          body = `<p>До вылета перевозчика в 22:00 есть полчаса. Их можно провести с одним человеком из экипажа. Это сблизит вас, а у каждого найдётся мысль о деле.</p><div class="team-grid">${crewIds
+            .map((id) => `<button type="button" class="team-card" data-a="evening-pick" data-v="${id}"><img class="crew-thumb" src="${abs(`../prologue/assets/crew-${id}-off.webp`)}" alt=""><b>${esc(D.npcs[id].name)}</b><small>${esc({ mara: 'Ужин в кают-компании', corvin: 'Чай в лаборатории', irena: 'У поста аналитика', rein: 'Чистка оружия в шлюзе' }[id])}</small></button>`)
+            .join('')}</div><p class="muted">Вечер займёт 30 минут игрового времени.</p>`;
+        break;
+      }
       case 'puzzles':
         title = 'Криминалистическая лаборатория';
         body = `<p>Каждая экспертиза проверяет конкретную версию. Без исходных материалов её нельзя провести.</p><div class="grid">${entries(
@@ -689,7 +766,7 @@
         break;
       case 'system':
         title = 'Меню';
-        body = `<div class="menu-list">${b('close', '', 'Продолжить игру', true)}${b('save', '', 'Сохранить вручную')}${b('load', '', 'Загрузить ручное сохранение')}${b('panel', 'puzzles', 'Лаборатория')}${b('journal-tab', 'lore', 'Термины мира')}<a href="?prequel=1" class="btn">Изменить предысторию</a>${b('new-confirm', '', 'Начать главу заново')}<a href="../prologue/" class="btn">Главное меню · Пролог</a></div>${FX ? '<h3>Настройки</h3>' + FX.settingsBody() : ''}<small class="muted">Прогресс сохраняется автоматически после каждого действия. Настройки общие с прологом.</small>`;
+        body = `<div class="menu-list">${b('close', '', 'Продолжить игру', true)}${b('save', '', 'Сохранить вручную')}${b('load', '', 'Загрузить ручное сохранение')}${b('panel', 'puzzles', 'Лаборатория')}${b('journal-tab', 'lore', 'Термины мира')}<a href="?prequel=1" class="btn">Изменить предысторию</a>${b('new-confirm', '', 'Начать главу заново')}<a href="../prologue/" class="btn">Главное меню · Пролог</a></div><h3>Сложность</h3><div class="seg">${[['family', 'Для семьи'], ['normal', 'Обычная'], ['detective', 'Следователь']].map(([m, l]) => `<button type="button" class="btn${(state.mode || 'normal') === m ? ' primary' : ''}" data-a="set-mode" data-v="${m}" aria-pressed="${(state.mode || 'normal') === m}">${l}</button>`).join('')}</div><p class="muted">${esc({ family: 'Подсказки на доске улик, Восс читается сразу, меньше давления.', normal: 'Подсказки только по запросу.', detective: 'Без счётчика нитей, Восс держится дольше, ошибочная версия стоит 20 минут.' }[state.mode || 'normal'])}</p>${FX ? '<h3>Настройки</h3>' + FX.settingsBody() : ''}<small class="muted">Прогресс сохраняется автоматически после каждого действия. Настройки общие с прологом.</small>`;
         break;
       case 'dismiss-confirm':
         title = 'Закрыть дело без доказанного обвинения?';
@@ -704,6 +781,7 @@
         body = '<p>Продолжайте исследование локации.</p>';
     }
     panelShell(title, body);
+    if (view === 'deductions' && focus) drawThreads();
     if (view === 'game' && focus === 'tumbler' && typeof requestAnimationFrame === 'function') {
       needleStart = performance.now();
       needleLoop();
@@ -856,6 +934,70 @@
         if (spot) open(spot[4]);
         break;
       }
+      case 'set-mode':
+        run('mode', v, { showPassage: false });
+        break;
+      case 'duel-open': {
+        if (state.interview) {
+          notify('Допрос завершён.');
+          break;
+        }
+        const check = E.dispatch(state, 'interview', 'evidence');
+        if (!check.ok) {
+          notify(check.message);
+          break;
+        }
+        const max = D.duel.composure[state.mode || 'normal'] || 3;
+        const order = D.duel.claims.map((_, i) => i).sort((a, c) => ((a * 7 + state.tick) % 5) - ((c * 7 + state.tick) % 5));
+        duel = { composure: max, round: 0, order, read: false, log: 'Восс садится напротив и складывает руки. «Спрашивайте. У меня есть ответы на всё».' };
+        open('duel');
+        break;
+      }
+      case 'duel-read':
+        if (!duel) break;
+        duel.read = true;
+        FX?.sfx.click(false);
+        paintPanel();
+        break;
+      case 'duel-show': {
+        if (!duel) break;
+        const claim = D.duel.claims[duel.order[duel.round]];
+        const max = D.duel.composure[state.mode || 'normal'] || 3;
+        if (claim.counters.includes(v)) {
+          duel.composure--;
+          duel.log = D.duel.hit[duel.round % D.duel.hit.length] + ' Вы предъявили: ' + materialLabel(v) + '.';
+          FX?.sfx.open();
+          FX?.haptic(true, [30, 40, 30]);
+        } else {
+          duel.composure++;
+          duel.log = D.duel.miss[duel.round % D.duel.miss.length];
+          FX?.sfx.fail();
+          FX?.haptic(true, [100]);
+        }
+        duel.round++;
+        duel.read = false;
+        if (duel.composure <= 0) {
+          duel = null;
+          if (run('interview', 'evidence', { close: true })) {
+            speaker = 'Служебный допрос';
+            render();
+          }
+        } else if (duel.composure >= max + 2 || duel.round >= duel.order.length) {
+          duel = null;
+          close();
+          run('duel', 'lost', { showPassage: false });
+        } else {
+          paintPanel();
+          scrollPanelTop();
+        }
+        break;
+      }
+      case 'evening-pick':
+        if (run('evening', v, { showPassage: false })) {
+          eveningText = typeof D.evenings[v] === 'function' ? D.evenings[v](state, E.known) : D.evenings[v];
+          paintPanel();
+        }
+        break;
       case 'panel-scene':
         open('scene', v);
         break;
@@ -1002,8 +1144,33 @@
         selection = selection.includes(v) ? selection.filter((x) => x !== v) : [...selection, v];
         paintPanel();
         break;
-      case 'submit-deduction':
-        run('deduce', { id: v, evidence: selection }, { close: true });
+      case 'submit-deduction': {
+        const tried = [...selection];
+        if (!run('deduce', { id: v, evidence: tried }, { showPassage: false })) break;
+        if (state.conclusions.includes(v)) {
+          boardHint = '';
+          const c = D.conclusions[v];
+          close();
+          speech = c.thought || c.text || c.title;
+          speaker = 'Версия подтверждена';
+          page = 0;
+          render();
+        } else {
+          scrollPanelTop();
+          setTimeout(() => drawThreads(true), 250);
+          /* В режиме «для семьи» после ошибки подсвечиваем один верный материал */
+          const right = D.conclusions[v].requires.filter((e) => state.evidence.includes(e));
+          boardHint = state.mode === 'family' ? right.find((e) => !tried.includes(e)) || right[0] || '' : '';
+          setTimeout(() => {
+            selection = [];
+            if (view === 'deductions') paintPanel();
+          }, 1100);
+        }
+        break;
+      }
+      case 'board-clear':
+        selection = [];
+        paintPanel();
         break;
       case 'submit-sanction':
         run('sanction', selection, { close: true });
