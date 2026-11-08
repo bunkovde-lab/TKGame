@@ -423,7 +423,8 @@ function renderEnding(){
     '<div class="res-block"><h3>Экипаж</h3><ul class="crew-summary">'+E.crewIds.map(id=>'<li><strong>'+esc(C.bonds.short[id])+'</strong> '+esc(C.bonds.ending[crewMood(id)])+(state.pulse[id]==='revealed'?' <em>Секрет доверен.</em>':'')+(state.caught.includes(id)?' <em>Правда сказана.</em>':'')+'</li>').join('')+'</ul></div>'+
     '<div class="res-block"><h3>Улики · '+found.length+' из '+R.evidence.length+'</h3><p class="res-small">'+esc(found.map(id=>C.documents[id].title).join(' · '))+'</p>'+(missed.length?'<p class="res-small missed">Упущено: '+esc(missed.map(id=>C.documents[id].title).join(' · '))+'</p>':'')+'</div>'+
     '<div class="res-block"><h3>Подход</h3><p class="res-small">'+esc(state.late?R.late:R.onTime)+' '+esc(R[state.dockStyle]||'')+(state.argument?' Спор: '+esc(C.argument.options[state.argument].label)+'.':'')+(state.mira?' '+esc(C.interro.result[state.mira]):'')+(state.center?' '+esc(C.center.result[state.center]):'')+'</p></div></div>';
-  endingFrame('results','dock','Конец пролога',R.title,'',body,btn('restart','','Начать пролог заново',{primary:true})+btn('title-menu','','Главное меню'));
+  saveOutcome();
+  endingFrame('results','dock','Конец пролога',R.title,'',body,'<a class="btn primary" href="../chapter/?from=prologue">Начать главу I →</a>'+btn('restart','','Начать пролог заново')+btn('title-menu','','Главное меню'));
 }
 function renderInterrogation(){
   const I=C.interro;const [a,b]=state.team;const name=id=>C.bonds.short[id];
@@ -443,11 +444,19 @@ function renderInterrogation(){
   const moves=btn('mira-move','good',I.moves.good+' · '+name(state.roles.good))+btn('mira-move','bad',I.moves.bad+' · '+name(state.roles.bad))+btn('mira-move','self',I.moves.self);
   endingFrame('interro-'+r.steps.length,'intro-0','Лунный арбитраж · допрос',I.title,text,extra,moves);
 }
+/* Итоги пролога для главы I */
+function saveOutcome(){
+  const best=E.replies.reduce((a,b)=>state.path[b]>state.path[a]?b:a);
+  const outcome={version:1,source:'prologue',path:best,team:state.team?[...state.team]:[],mira:state.mira||'partial',center:state.center||null,late:state.late===true,
+    mood:Object.fromEntries(E.crewIds.map(id=>[id,crewMood(id)])),found:C.results.evidence.filter(id=>state.documents.includes(id)),
+    caught:[...state.caught],secrets:E.crewIds.filter(id=>state.pulse[id]==='revealed')};
+  try{localStorage.setItem('tkgame-prologue-outcome',JSON.stringify(outcome));}catch{}
+}
 function renderTitle(){
   const canContinue=state.intro>0;
   app.innerHTML='<main class="game title-screen"><section class="scene intro title'+sceneEnter('title')+'" style="--art:url(assets/intro-0.webp)"><div class="scene-art kb">'+fxLayer('intro-0')+'</div><canvas class="dust-fx" aria-hidden="true"></canvas><div class="bars" aria-hidden="true"><i></i><i></i></div><div class="dust" aria-hidden="true">'+'<i></i>'.repeat(16)+'</div>'+
     '<div class="title-copy"><div class="kicker">Дела контрразведки Багряных домов</div><h1 class="logo">Мир Раскола</h1><p class="subtitle">Пролог · «Приказ»</p><div class="title-menu">'+
-    (canContinue?btn('title-continue','','Продолжить',{primary:true}):'')+btn('title-new','',canContinue?'Новая игра':'Начать игру',{primary:!canContinue})+btn('panel','settings','Настройки')+
+    (canContinue?btn('title-continue','','Продолжить',{primary:true}):'')+btn('title-new','',canContinue?'Новая игра':'Начать с пролога',{primary:!canContinue})+'<a class="btn" href="../chapter/">Сразу к главе I</a>'+btn('panel','settings','Настройки')+
     '</div><small class="title-foot">Автосохранение включено · Лучше играть со звуком</small></div></section></main>';
 }
 function settingsBody(){

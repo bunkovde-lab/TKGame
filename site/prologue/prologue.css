@@ -1043,3 +1043,4 @@ small, .muted { color: var(--muted); }
   .scene.has-crew .embedded-actor { --actor-x: 67%; --actor-width: 23%; }
 }
 @media (prefers-reduced-motion: reduce) { .pano-edge { animation: none; } }
+a.btn { display: inline-flex; align-items: center; justify-content: center; }
