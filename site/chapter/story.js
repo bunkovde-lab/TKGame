@@ -51,4 +51,23 @@ D.shipLines={
   irena:'Канал запросов открыт. Дайте мне след, и я пройду по цепочке.',
   rein:'У стойки решают, кто идёт в порт. Скажите, кого берёте.'
 };
+/* Где экипаж стоит на локациях порта. x — центр, y — линия пола под ногами, h — рост в процентах высоты арта
+   (по перспективе: чем ближе к зрителю, тем ниже линия пола и выше фигура). Свет подгоняет вырезку под арт.
+   Спутник появляется не везде: только там, где у него есть дело. Каждые три часа игрового времени точки меняются. */
+D.crewPosts={
+  port:{crew:['rein','mara','irena'],light:'brightness(.78) saturate(.8) contrast(1.06) sepia(.12)',
+    posts:[{x:46,y:61,h:31,note:'у турникетов'},{x:60,y:51,h:17,note:'у окна, смотрит на табло'},{x:88,y:56,h:24,note:'у ограждения'}]},
+  waiting:{crew:['corvin','rein','mara'],light:'brightness(.74) saturate(.8) contrast(1.05) sepia(.1) hue-rotate(-6deg)',
+    posts:[{x:58,y:58,h:27,note:'посреди зала'},{x:68,y:49,h:15,note:'у выходов к гейтам'}]},
+  registry:{crew:['irena','mara'],light:'brightness(.76) saturate(.85) contrast(1.05) sepia(.18)',
+    posts:[{x:41,y:57,h:17,note:'в проходе между столами'},{x:35,y:52,h:11,note:'у дальних терминалов'}]},
+  clinic:{crew:['corvin','irena'],light:'brightness(.8) saturate(.75) contrast(1.04) sepia(.08)',
+    posts:[{x:47,y:57,h:16,note:'в коридоре палат'},{x:36,y:66,h:27,note:'у кювезов'}]},
+  warehouse:{crew:['mara','rein','corvin'],light:'brightness(.72) saturate(.85) contrast(1.08) sepia(.2)',
+    posts:[{x:58,y:63,h:22,note:'у погрузчика'},{x:38,y:57,h:13,note:'у дальних контейнеров'}]},
+  archive:{crew:['irena'],light:'brightness(.68) saturate(.8) contrast(1.06) sepia(.22)',
+    posts:[{x:53,y:56,h:12,note:'у стеллажей'}]},
+  relay:{crew:['rein','mara','corvin'],light:'brightness(.7) saturate(.8) contrast(1.08) sepia(.16)',
+    posts:[{x:40,y:61,h:24,note:'в коридоре'},{x:36,y:51,h:13,note:'у дальнего шлюза'}]}
+};
 })();

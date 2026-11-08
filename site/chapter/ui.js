@@ -231,6 +231,15 @@
     const t = state.trust[id];
     return { cls: t > 0 ? 'up' : t < 0 ? 'down' : 'flat', label: t > 1 ? 'доверяет' : t > 0 ? 'открывается' : t < 0 ? 'насторожен' : 'присматривается' };
   }
+  /* Спутники на фоне локации: точки из D.crewPosts, смена мест каждые три часа игрового времени */
+  function crewPlaced(loc = state.location) {
+    const cfg = D.crewPosts?.[loc];
+    if (!cfg || loc === 'office') return [];
+    const team = E.teamOf ? E.teamOf(state) : [];
+    const here = cfg.crew.filter((id) => team.includes(id));
+    const block = Math.floor(state.tick / 18);
+    return here.slice(0, cfg.posts.length).map((id, i) => ({ id, ...cfg.posts[(i + block) % cfg.posts.length] }));
+  }
   function sceneEnter(key) {
     const changed = key !== lastSceneKey;
     lastSceneKey = key;
@@ -256,7 +265,9 @@
     const interview = state.location === 'registry' && state.activeNpc === 'chief';
     const artFile = onShip ? room.art : interview ? 'assets/scene-interview.webp' : art(state.location);
     const ratio = onShip ? room.ratio : '16 / 9';
-    const focusX = onShip ? (room.crew ? 0.67 : 0.5) : companionTalk ? 0.3 : n && actorX[state.location] ? actorX[state.location] / 100 : 0.5;
+    const placed = onShip || interview ? [] : crewPlaced();
+    const talkPost = companionTalk ? placed.find((c) => c.id === state.activeNpc) : null;
+    const focusX = onShip ? (room.crew ? 0.67 : 0.5) : talkPost ? talkPost.x / 100 : companionTalk ? 0.5 : n && actorX[state.location] ? actorX[state.location] / 100 : 0.5;
     const actors = onShip
       ? room.crew
         ? `<button type="button" class="embedded-actor" data-a="talk" data-v="${room.crew}" aria-label="Поговорить: ${esc(D.npcs[room.crew].name)}"><span>${esc(D.npcs[room.crew].name)}</span></button>`
@@ -270,15 +281,14 @@
           )
           .join('');
     /* Спутники из экипажа стоят рядом с командиром на каждой локации порта */
-    const companions = onShip
-      ? ''
-      : team
-          .map((id, i) => {
-            const speaking = state.activeNpc === id;
-            if (n && !speaking) return '';
-            return `<button type="button" class="companion c${i}${speaking ? ' speaking' : ''}" style="--cx:${speaking ? 13 : 8 + i * 11}%" data-a="talk" data-v="${id}" aria-label="Поговорить: ${esc(D.npcs[id].name)}"><img src="${abs(`../prologue/assets/crew-${id}${speaking ? '-talk' : ''}.webp`)}" alt=""><span>${esc(shortName[id])}</span></button>`;
-          })
-          .join('');
+    const light = D.crewPosts?.[state.location]?.light || '';
+    const companions = placed
+      .map((c) => {
+        const speaking = state.activeNpc === c.id;
+        const far = c.h < 18 ? ' far' : '';
+        return `<button type="button" class="crew-figure${speaking ? ' speaking' : ''}${far}" style="--x:${c.x}%;--y:${c.y}%;--h:${c.h}%;--light:${light}" data-a="talk" data-v="${c.id}" aria-label="Поговорить: ${esc(D.npcs[c.id].name)}, ${esc(c.note)}"${n || text ? ' tabindex="-1"' : ''}><img src="${abs(`../prologue/assets/crew-${c.id}.webp`)}" alt=""><span>${esc(shortName[c.id])}</span></button>`;
+      })
+      .join('');
     const spots = onShip
       ? room.spots.map(
           ([id, label, x, y], i) =>
@@ -342,7 +352,7 @@
     const placeName = interview ? 'Кабинет начальника порта' : onShip ? room.name : l.name;
     const kicker = `${onShip ? 'Шаттл · у причала' : 'Лунный арбитраж'} · ${E.period(state)}${state.sanction ? ' · Санкция Центра' : ''}`;
     const sceneKey = `${state.location}:${onShip ? state.ship : ''}:${interview}`;
-    app.innerHTML = `<main class="game">${topBar()}<section class="scene${n ? ' scene-speaking' : ''}${onShip && room.crew ? ' has-crew' : ''}${sceneEnter(sceneKey)}" aria-label="${esc(placeName)}" style="--art:url('${abs(artFile)}')"><div class="pano"><div class="pano-track" style="--ratio:${ratio}"><div class="scene-art"></div>${!n && !text ? actors + objects : ''}</div></div>${!text || companionTalk ? companions : ''}<i class="pano-edge left" aria-hidden="true">‹</i><i class="pano-edge right" aria-hidden="true">›</i><canvas class="dust-fx" aria-hidden="true"></canvas><div class="bars top-only" aria-hidden="true"><i></i></div><header><div class="kicker">${esc(kicker)}</div><h1>${esc(placeName)}</h1>${!n ? `<div class="goal"><span>Цель</span>${esc(objective())}</div>` : ''}</header>${dialog}${thoughtBox}${exits}${cinema ? `<div class="cinema" style="--combat-art:url('${abs(`assets/combat-${cinemaArt}.webp`)}')"><div class="kicker">Хищный расчёт · Последствия</div><p>${esc(cinema)}</p>${b('cinema-done', '', 'Оценить последствия', true)}</div>` : ''}${state.ending ? endingMarkup() : ''}</section></main>`;
+    app.innerHTML = `<main class="game">${topBar()}<section class="scene${n ? ' scene-speaking' : ''}${onShip && room.crew ? ' has-crew' : ''}${sceneEnter(sceneKey)}" aria-label="${esc(placeName)}" style="--art:url('${abs(artFile)}')"><div class="pano"><div class="pano-track" style="--ratio:${ratio}"><div class="scene-art"></div>${companions}${!n && !text ? actors + objects : ''}</div></div><i class="pano-edge left" aria-hidden="true">‹</i><i class="pano-edge right" aria-hidden="true">›</i><canvas class="dust-fx" aria-hidden="true"></canvas><div class="bars top-only" aria-hidden="true"><i></i></div><header><div class="kicker">${esc(kicker)}</div><h1>${esc(placeName)}</h1>${!n ? `<div class="goal"><span>Цель</span>${esc(objective())}</div>` : ''}</header>${dialog}${thoughtBox}${exits}${cinema ? `<div class="cinema" style="--combat-art:url('${abs(`assets/combat-${cinemaArt}.webp`)}')"><div class="kicker">Хищный расчёт · Последствия</div><p>${esc(cinema)}</p>${b('cinema-done', '', 'Оценить последствия', true)}</div>` : ''}${state.ending ? endingMarkup() : ''}</section></main>`;
     if (FX) {
       FX.setupPano(app, sceneKey, focusX, Boolean(n), notify);
       FX.startDust(app);
@@ -572,7 +582,8 @@
         const cards = crewIds
           .map((id) => {
             const with_ = !onShip && team.includes(id);
-            const where = onShip ? `на борту · ${roomName(id)}` : with_ ? 'с вами в порту' : `на шаттле · ${roomName(id)}`;
+            const post = with_ ? crewPlaced().find((c) => c.id === id) : null;
+            const where = onShip ? `на борту · ${roomName(id)}` : with_ ? (post ? `здесь · ${post.note}` : 'в порту · на связи') : `на шаттле · ${roomName(id)}`;
             const mood = moodOf(id);
             const own = (D.npcs[id]?.topics || []).filter((t) => t.personal);
             const ownOpen = E.availableTopics(state, id).filter((t) => t.personal && !state.talked.includes(t.id)).length;
