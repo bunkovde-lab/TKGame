@@ -114,15 +114,16 @@ button.card:active { transform: scale(.98); }
 .hero-line .tw { font-style: italic; color: #e9dcc4; }
 .hero-line .tw::before { content: "— "; color: var(--gold); }
 
-/* Экипаж: спутники на локациях порта и карточки группы */
-.companion { position: absolute; z-index: 1; left: var(--cx, 10%); bottom: 4.2rem; height: 50%; aspect-ratio: 150 / 435; transform: translateX(-50%); padding: 0; border: 0; background: none; display: grid; justify-items: center; align-items: end; cursor: pointer; filter: drop-shadow(0 .6rem 1rem #000b) brightness(.92); transition: filter .25s, transform .25s; }
-.companion img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: bottom; pointer-events: none; }
-.companion span { position: relative; margin-bottom: -.4rem; padding: .15rem .45rem; font-size: .72rem; color: #f9e8cb; background: #0b1420e6; border: 1px solid #c39b648e; border-radius: .24rem; }
-.companion:hover, .companion:focus-visible { filter: drop-shadow(0 0 .8rem #e5b87966) brightness(1.05); }
-.companion:hover span, .companion:focus-visible span { background: var(--gold); color: #211811; }
-.companion.speaking { height: 82%; bottom: 0; filter: drop-shadow(0 .6rem 1.4rem #000c); animation: fade .5s ease both; }
-.companion.speaking span { display: none; }
-.scene.enter .companion { animation: rise .6s var(--ease-out) .35s both; }
+/* Экипаж: спутники стоят в глубине локации, по перспективе и свету арта */
+.crew-figure { position: absolute; z-index: 1; left: var(--x); top: calc(var(--y) - var(--h)); height: var(--h); aspect-ratio: 150 / 435; transform: translateX(-50%); padding: 0; border: 0; background: none; cursor: pointer; }
+.crew-figure img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: bottom; pointer-events: none; filter: var(--light) drop-shadow(0 0 1px #0008); transition: filter .3s; }
+.crew-figure::before { content: ""; position: absolute; left: 50%; bottom: -1.5%; width: 120%; height: 6%; transform: translateX(-50%); background: radial-gradient(ellipse at center, #000c 0%, #0006 45%, #0000 72%); pointer-events: none; }
+.crew-figure.far img { filter: var(--light) blur(.35px) brightness(.9); }
+.crew-figure span { position: absolute; left: 50%; bottom: 100%; transform: translate(-50%, -.2rem); white-space: nowrap; padding: .05rem .4rem; font-size: .66rem; color: #f9e8cb; background: #0b1420cc; border: 1px solid #c39b6466; border-radius: .2rem; opacity: .75; pointer-events: none; transition: opacity .2s; }
+.crew-figure:hover img, .crew-figure:focus-visible img, .crew-figure.speaking img { filter: var(--light) brightness(1.15) drop-shadow(0 0 .35rem #e5b879aa); }
+.crew-figure:hover span, .crew-figure:focus-visible span { opacity: 1; background: var(--gold); color: #211811; }
+.scene-speaking .crew-figure:not(.speaking) span, .crew-figure.speaking span { opacity: 0; }
+.scene.enter .crew-figure { animation: fade .8s ease .3s both; }
 .crew-list { display: grid; gap: .5rem; }
 .crew-card { grid-template-columns: 4.2rem 1fr; align-items: start; gap: .7rem; }
 .crew-card .mood { display: inline-block; margin: .25rem 0; font-size: .64rem; letter-spacing: .06em; text-transform: uppercase; padding: .1rem .45rem; border-radius: 99px; border: 1px solid currentColor; }
@@ -132,10 +133,6 @@ button.card:active { transform: scale(.98); }
 .exits .exit.port { border-color: var(--gold); }
 .exits .exit.port span { color: var(--gold); }
 @media (max-width: 760px) {
-  .companion { height: 34%; bottom: 4.6rem; }
-  .companion.c0 { --cx: 9% !important; }
-  .companion.c1 { --cx: 27% !important; }
-  .companion.speaking { display: none; }
   .ship-exits { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: .1rem; }
   .ship-exits::-webkit-scrollbar { display: none; }
   .ship-exits .exit { flex: none; }
