@@ -40,6 +40,9 @@
         reads: [],
         caught: [],
         games: [],
+        mode: "normal",
+        evening: null,
+        duel: 0,
       },
       prior,
     );
@@ -101,6 +104,10 @@
     if (t.centerText && s.prior?.center && t.centerText[s.prior.center]) text += " " + t.centerText[s.prior.center];
     return text;
   }
+  function eveningOpen(s) {
+    const t = s.tick % 144;
+    return !s.evening && !s.ending && t >= 108 && t < 132 && s.tick < 144;
+  }
   function pendingScene(s) {
     if (s.ending) return null;
     return (D().scenes || []).find((sc) => !s.scenes?.[sc.id] && sc.when(s, known)) || null;
@@ -132,6 +139,9 @@
       for (const id of crewIds) if (Number.isSafeInteger(raw.bonds[id])) s.bonds[id] = Math.max(-3, Math.min(6, raw.bonds[id]));
     if (raw.scenes && typeof raw.scenes === "object")
       for (const [k, v] of Object.entries(raw.scenes)) if (typeof v === "string" && (!d?.scenes || d.scenes.some((x) => x.id === k))) s.scenes[k] = v;
+    s.mode = ["family", "normal", "detective"].includes(raw.mode) ? raw.mode : "normal";
+    s.evening = crewIds.includes(raw.evening) ? raw.evening : null;
+    s.duel = Number.isSafeInteger(raw.duel) && raw.duel >= 0 ? raw.duel : 0;
     for (const k of ["reads", "caught", "games"]) if (Array.isArray(raw[k])) s[k] = [...new Set(raw[k].filter((x) => typeof x === "string"))];
     return s;
   }
@@ -267,6 +277,28 @@
         if (value.skip) return win("Проверка проведена грубо: ушло двадцать минут.", "", 2);
         return win(g.done || "Проверка пройдена.");
       }
+      case "mode":
+        if (!["family", "normal", "detective"].includes(value)) return fail("Неизвестный режим.");
+        s.mode = value;
+        return win({ family: "Режим «для семьи»: больше подсказок.", normal: "Обычный режим.", detective: "Режим «следователь»: без подсказок, ошибки дороже." }[value]);
+      case "evening": {
+        const ev = d.evenings?.[value];
+        if (!ev) return fail("Выберите, с кем провести вечер.");
+        if (s.location !== "office") return fail("Вечер проводят на шаттле.");
+        if (s.evening) return fail("Вечер уже прошёл.");
+        if (!eveningOpen(s)) return fail("Свободные полчаса будут только вечером, с 18:00 до вылета.");
+        s.evening = value;
+        s.bonds[value] += 1;
+        return win("Полчаса с экипажем. " + d.npcs[value].name.split(" ")[0] + " доверяет вам больше.", typeof ev === "function" ? ev(s, known) : ev, 3);
+      }
+      case "duel": {
+        if (s.location !== "registry") return fail("Допрос проводится в управлении реестра.");
+        if (s.interview) return fail("Допрос завершён.");
+        if (value !== "lost") return fail("Неизвестный исход.");
+        s.duel++;
+        s.heat++;
+        return win("Восс восстановил самообладание и прервал допрос. Ушло двадцать минут, напряжённость выросла.", "", 2);
+      }
       case "end-talk":
         s.activeNpc = null;
         s.topic = null;
@@ -340,7 +372,7 @@
           return win(
             "Версия не подтверждена: эти материалы не связывают все звенья. Проверка отняла время.",
             "Я связал похожие слова вместо независимых фактов. Эту комбинацию повторять бессмысленно; нужно изменить основания.",
-            1,
+            s.mode === "detective" ? 2 : 1,
           );
         }
         add(s.conclusions, value.id);
@@ -556,5 +588,6 @@
     moodOf,
     topicText,
     pendingScene,
+    eveningOpen,
   };
 })();
